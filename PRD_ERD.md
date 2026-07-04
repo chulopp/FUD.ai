@@ -1,3 +1,31 @@
+# Roadmap Eksekusi FUD.ai
+
+### Fase 1: Kerangka & Pancingan Juri (Fokus Hari Ini)
+Tujuan hari ini bukan bikin AI pintar, tapi bikin "pipa saluran" dan menyalakan mesin perekam *bug* untuk TestSprite.
+* **Inisiasi Repositori:** Bikin proyek Next.js kosong (App Router).
+* **Siapkan Endpoint:** Buat *file* `app/api/agent/route.ts`. Jangan taruh LLM dulu. Bikin *endpoint* ini memuntahkan JSON statis (*dummy data*) yang strukturnya persis seperti format `drama_index` dan `executable_verdict` di PRD lu.
+* **Pasang Jebakan TestSprite:** *Install* TestSprite CLI. Arahkan TestSprite untuk mulai membombardir *endpoint* statis lu tadi. Biarkan TestSprite mencatat bahwa API lu sudah merespons JSON dengan benar, sehingga file `LOOP.md` lu mulai terisi dari hari pertama.
+
+### Fase 2: Otak & Panca Indera (Fokus Hari Ke-2)
+Hari ini tangan lu kotor dengan logika *backend* dan integrasi pihak ketiga.
+* **Integrasi Panca Indera:** Pasang konektor MCP lu untuk menyedot data dari Telegram dan Twitter. Sambungkan juga API Testnet-Bybit lu untuk menarik data *Order Book* mentah.
+* **Rakit 3 Mesin LLM:** Masukkan API key dari OpenRouter dan OpenCode Go. Bikin fungsi terpisah untuk *Lightweight Engine* (Laguna), *Vision Engine* (Mimo), dan *Heavyweight Engine* (DeepSeek).
+* **Prompt Chaining:** Hubungkan aliran datanya. Biarkan DeepSeek melakukan simulasi *Monte Carlo Tree Search* (MCTS) dari data yang sudah diringkas oleh Laguna.
+* **TestSprite Berdarah-darah:** Saat lu menggabungkan API luar dan 3 LLM ini, *endpoint* lu pasti akan sering *timeout* atau *error*. Nyalakan TestSprite lagi. Biarkan AI *coding* lu dan TestSprite bertarung memperbaiki *bug*-nya secara otomatis dan mempertebal isi `LOOP.md` lu.
+
+### Fase 3: Mesin Uang & Penghematan (Fokus Hari Ke-3)
+AI lu sudah pintar, sekarang saatnya memastikan dia bisa berbisnis dan lu nggak boncos.
+* **Semantic Caching:** Pasang Upstash Redis. Buat logika: jika ada *request* koin yang sama dalam 5 menit terakhir, potong jalur LLM dan langsung kembalikan hasil JSON dari Redis.
+* **Protokol CROO (The Economy Layer):** Integrasikan *listener* *smart contract* CROO CAP. Pastikan *endpoint* API lu hanya mau memproses *request* dari bot klien **jika** transaksi USDC sudah terkonfirmasi di *blockchain*.
+
+### Fase 4: Wajah & Etalase (Fokus Hari Ke-4 / H-1)
+Karena lu udah punya referensi UI, fase ini akan berjalan sangat cepat.
+* **Landing Page & Dashboard:** Bangun UI Next.js lu. Tarik data dari API lu sendiri untuk ditampilkan di *Live Dashboard*.
+* **Mobile Testing:** Buka URL *staging* lu di ponsel Android resolusi tinggi lu. Pastikan diagram MCTS dan teks JSON tidak *overflow* (melebar keluar layar) saat dibuka di peramban *mobile*.
+* **Demo & Submit:** Rekam layar (maksimal 5 menit) yang mendemonstrasikan keseluruhan alur: dari pembayaran USDC masuk, logika agen berpikir, hingga dasbor yang berkedip memperbarui status FUD. *Submit* repositori GitHub dan `LOOP.md` ke DoraHacks.
+
+---
+
 # FUD.ai
 ### The Crypto Drama Oracle — Epistemic Swarm Architecture (REVISI)
 *Autonomous Agent-to-Agent Sentiment Oracle di atas protokol CROO — murni layanan API, tanpa chatbot*
