@@ -29,12 +29,29 @@ def main():
         data = response.json()
         print(f"Response JSON: {json.dumps(data, indent=2)}")
         
-        # Validate the VERDICT schema
-        assert "sentiment" in data, "Missing 'sentiment'"
-        assert data["sentiment"] in ["BULLISH", "BEARISH", "NEUTRAL"], f"Invalid sentiment: {data['sentiment']}"
+        # Validate the EXACT VERDICT schema from PRD_ERD.md
+        assert "request_id" in data, "Missing 'request_id'"
+        assert "coin_symbol" in data, "Missing 'coin_symbol'"
+        
+        assert "drama_index" in data, "Missing 'drama_index'"
+        assert isinstance(data["drama_index"], (int, float)), "drama_index must be a number"
+        
         assert "confidence" in data, "Missing 'confidence'"
-        assert isinstance(data["confidence"], (int, float)), "Confidence must be a number"
-        assert "reasoning" in data, "Missing 'reasoning'"
+        assert isinstance(data["confidence"], (int, float)), "confidence must be a number"
+        
+        assert "dominant_branch" in data, "Missing 'dominant_branch'"
+        
+        assert "branch_probabilities" in data, "Missing 'branch_probabilities'"
+        assert isinstance(data["branch_probabilities"], dict), "branch_probabilities must be an object"
+        
+        assert "evidence_chain" in data, "Missing 'evidence_chain'"
+        assert isinstance(data["evidence_chain"], list), "evidence_chain must be a list"
+        
+        assert "executable_verdict" in data, "Missing 'executable_verdict'"
+        assert data["executable_verdict"] in ["LIQUIDATE_LONGS", "HOLD", "ACCUMULATE", "IGNORE_FUD"], f"Invalid executable_verdict: {data['executable_verdict']}"
+        
+        assert "served_from_cache" in data, "Missing 'served_from_cache'"
+        assert isinstance(data["served_from_cache"], bool), "served_from_cache must be boolean"
         
         print("PASS: Schema validation successful.")
         sys.exit(0)

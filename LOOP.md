@@ -5,10 +5,10 @@ Endpoint: https://reword-situated-barman.ngrok-free.dev/api/agent
 Method: POST
 
 ### Native TestSprite Results
-- **Test ID**: `c603e19e-33b9-4782-9adf-78f656ce1f14`
-- **Dashboard**: [TestSprite Result](https://www.testsprite.com/dashboard/tests/efd7c80f-4eb2-421b-9f92-c1a629004147/test/c603e19e-33b9-4782-9adf-78f656ce1f14)
+- **Test ID**: `bb62ab19-d9b0-4dca-9a7e-615f2d7c1bd9`
+- **Dashboard**: [TestSprite Result](https://www.testsprite.com/dashboard/tests/efd7c80f-4eb2-421b-9f92-c1a629004147/test/bb62ab19-d9b0-4dca-9a7e-615f2d7c1bd9)
 - **Status**: ✅ PASS
-- **Verified Fields**: `sentiment` (enum), `confidence` (number), `reasoning` (string)
+- **Verified Fields**: `request_id`, `coin_symbol`, `drama_index` (number), `confidence` (number), `dominant_branch`, `branch_probabilities` (object), `evidence_chain` (list), `executable_verdict` (enum), `served_from_cache` (boolean)
 
 **Note:** The test was executed via the native TestSprite cloud backend using Ngrok tunneling to bypass the local environment limitation.
 
