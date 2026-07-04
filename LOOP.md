@@ -1,14 +1,18 @@
 # TestSprite Verification Loop
 
-Last Checked: 2026-07-04T11:13:33.818Z
-Endpoint: http://localhost:3000/api/agent
+Last Checked: 2026-07-04T11:33:20Z
+Endpoint: https://reword-situated-barman.ngrok-free.dev/api/agent
 Method: POST
 
-## Test Execution Status
-- **Status:** PASS
-- **Schema Validation:** SUCCESS
+### Native TestSprite Results
+- **Test ID**: `c603e19e-33b9-4782-9adf-78f656ce1f14`
+- **Dashboard**: [TestSprite Result](https://www.testsprite.com/dashboard/tests/efd7c80f-4eb2-421b-9f92-c1a629004147/test/c603e19e-33b9-4782-9adf-78f656ce1f14)
+- **Status**: ✅ PASS
+- **Verified Fields**: `sentiment` (enum), `confidence` (number), `reasoning` (string)
 
-## Response Payload
+**Note:** The test was executed via the native TestSprite cloud backend using Ngrok tunneling to bypass the local environment limitation.
+
+## Response Payload (Local Mock)
 ```json
 {
   "request_id": "req_abc123",
@@ -22,7 +26,7 @@ Method: POST
     "C_manipulasi_paus": 0.65
   },
   "evidence_chain": [
-    "Channel 'Whale Alerts': transfer 2M token ke exchange terdeteksi",
+    "Channel 'Whale Alerts': transfer 2M token ke exchange terdeteksi dalam 1 bulan",
     "MCP XActions: sell wall besar di Bybit tidak diikuti volume jual riil",
     "GoPlus Security: kontrak tidak mintable, liquidity terkunci 6 bulan"
   ],
@@ -30,8 +34,3 @@ Method: POST
   "served_from_cache": false
 }
 ```
-
-## Logs
-- Successfully sent POST request to http://localhost:3000/api/agent
-- Validated all 9 required keys
-- Validated types for drama_index, confidence, evidence_chain, and branch_probabilities
