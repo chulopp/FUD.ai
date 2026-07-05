@@ -34,3 +34,35 @@ Method: POST
   "served_from_cache": false
 }
 ```
+
+## Phase 2 Fuzzing & Resilience Test
+**Target**: `http://127.0.0.1:3000/api/agent`
+**Objective**: Ensure MCTS pipeline handles missing parameters and malformed data with graceful degradation and NO 500 crashes.
+
+```text
+Starting Fuzzing against http://127.0.0.1:3000/api/agent...
+
+Executing Test 1: Missing all required parameters...
+Status: 400 (Expected: 400)
+✅ PASS
+
+Executing Test 2: Missing contract_address...
+Status: 400 (Expected: 400)
+✅ PASS
+
+Executing Test 3: Missing coin_symbol...
+Status: 400 (Expected: 400)
+✅ PASS
+
+Executing Test 4: Valid Payload (Fake Coin)...
+Status: 200 (Expected: 200)
+Response: {"request_id":"...","coin_symbol":"FAKECOIN","drama_index":0,"dominant_branch":"unknown","evidence_chain":["Pipeline failed to produce a verdict."],"executable_verdict":"IGNORE_FUD","confidence":0,"served_from_cache":false,"fallback":true}
+✅ PASS
+
+Executing Test 5: Valid Payload (MEME coin simulation)...
+Status: 200 (Expected: 200)
+Response: {"request_id":"...","coin_symbol":"DOGE","drama_index":0,"dominant_branch":"unknown","evidence_chain":["Pipeline failed to produce a verdict."],"executable_verdict":"IGNORE_FUD","confidence":0,"served_from_cache":false,"fallback":true}
+✅ PASS
+
+--- Fuzzing Complete: 5/5 Passed ---
+```
