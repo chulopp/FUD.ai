@@ -37,22 +37,24 @@ export async function runLightweightEngine(systemPrompt: string, userPrompt: str
 
 export async function runHeavyweightEngine(systemPrompt: string, userPrompt: string): Promise<string> {
     try {
-        const apiKey = process.env.OPENCODEGO_API_KEY;
-        const baseUrl = process.env.OPENCODEGO_BASE_URL || "https://api.opencode.go/v1/chat/completions";
+        const apiKey = process.env.OPENROUTER_API_KEY;
+        const baseUrl = process.env.OPENCODEGO_BASE_URL || "https://openrouter.ai/api/v1/chat/completions";
         
         if (!apiKey) {
-            console.warn("[LLM Warning] OPENCODEGO_API_KEY is missing.");
+            console.warn("[LLM Warning] OPENROUTER_API_KEY is missing.");
             return JSON.stringify({ error: "Heavyweight Engine unavailable", fallback: true });
         }
 
-        const response = await fetch(baseUrl, {
+        const response = await fetch("https://openrouter.ai/api/v1/chat/completions", {
             method: "POST",
             headers: {
                 "Authorization": `Bearer ${apiKey}`,
+                "HTTP-Referer": process.env.APP_URL || "https://fud.ai",
+                "X-Title": "FUD.ai Epistemic Swarm",
                 "Content-Type": "application/json"
             },
             body: JSON.stringify({
-                model: "deepseek/deepseek-v4-flash",
+                model: "meta-llama/llama-3-8b-instruct",
                 messages: [
                     { role: "system", content: systemPrompt },
                     { role: "user", content: userPrompt }

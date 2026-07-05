@@ -43,7 +43,9 @@ const LIGHTWEIGHT_SYSTEM_PROMPT = `You are a crypto data extractor. Read the soc
 
 const HEAVYWEIGHT_SYSTEM_PROMPT = `You are an MCTS evaluator for crypto FUD. Analyze the Market Data, Security Data, and FUD Claims. Create dynamic branches (hypotheses) based on the complexity of the claims (do not hardcode to 3 branches; create as many as logically necessary). Evaluate each branch against the on-chain data.
 
-You have TWO output options (RESPOND STRICTLY IN JSON, NO MARKDOWN FENCES):
+You MUST respond with a single valid JSON object only. Do NOT output markdown code blocks (e.g. \`\`\`json), do NOT include any introductory or concluding text. Return only the JSON structure.
+
+You have TWO output options:
 
 OPTION 1 (Need more data): {"action": "FETCH_MORE", "target": "describe missing on-chain or perp data needed"}
 
@@ -82,6 +84,7 @@ async function handleDynamicFetch(
   target: string,
   context: PipelineContext
 ): Promise<string> {
+  console.log("🔄 [ReAct] Dynamic Fetch triggered for target:", target);
   const t = target.toLowerCase();
   try {
     if (t.includes('perp') || t.includes('open interest') || t.includes('funding')) {
@@ -108,6 +111,7 @@ async function evaluateMCTS(
   context: PipelineContext,
   iteration: number = 0
 ): Promise<VerdictResult> {
+  console.log("⚖️ [STEP C] Heavyweight Engine (DeepSeek) MCTS reasoning started...");
   const FALLBACK_VERDICT: VerdictResult = {
     drama_index: 0,
     dominant_branch: 'unknown',
@@ -251,7 +255,7 @@ export async function executeFudAnalysis(
 
   try {
     // ── STEP A: Parallel ingestion ────────────────────────────
-    console.log(`[Pipeline] Starting FUD analysis for ${coinSymbol}...`);
+    console.log("🔍 [STEP A] Gathering data for:", coinSymbol);
     const [orderBook, dexData, securityGoPlus, securityRugCheck, twitterIntel, telegramIntel] =
       await Promise.all([
         fetchBybitOrderBook(coinSymbol + 'USDT'),
@@ -283,7 +287,7 @@ export async function executeFudAnalysis(
       }
     }
 
-    console.log(`[Pipeline] Step B complete: ${fudClaims.length} FUD claims extracted.`);
+    console.log("🧠 [STEP B] Noise Filter (GPT-OSS) output array length:", fudClaims.length);
 
     // ── STEP C + D: MCTS + ReAct ──────────────────────────────
     const context: PipelineContext = {

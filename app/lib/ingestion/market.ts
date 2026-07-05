@@ -1,6 +1,6 @@
 import crypto from 'crypto';
 
-const BYBIT_TESTNET_URL = 'https://api-testnet.bybit.com';
+const BYBIT_TESTNET_URL = process.env.BYBIT_BASE_URL || 'https://api.bybit.com';
 
 function generateBybitHeaders(apiKey: string | undefined, apiSecret: string | undefined, payload: string = ''): Record<string, string> {
     if (!apiKey || !apiSecret) return {};
