@@ -111,6 +111,7 @@ async function evaluateMCTS(
   const FALLBACK_VERDICT: VerdictResult = {
     drama_index: 0,
     dominant_branch: 'unknown',
+    branch_probabilities: {},
     evidence_chain: ['Pipeline failed to produce a verdict.'],
     executable_verdict: 'IGNORE_FUD',
     confidence: 0,
@@ -240,8 +241,10 @@ export async function executeFudAnalysis(
   const FALLBACK: VerdictResult = {
     drama_index: 0,
     dominant_branch: 'pipeline_error',
+    branch_probabilities: {},
     evidence_chain: ['Pipeline encountered a fatal error.'],
     executable_verdict: 'IGNORE_FUD',
+    confidence: 0,
     served_from_cache: false,
     fallback: true,
   };

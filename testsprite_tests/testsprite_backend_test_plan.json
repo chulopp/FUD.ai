@@ -1,0 +1,27 @@
+[
+  {
+    "id": "TC001",
+    "title": "post api agent valid request returns analysis verdict",
+    "description": "Test POST /api/agent with valid coin_symbol (DOGE), contract_address, and chain_id to verify it returns 200 status with valid schema."
+  },
+  {
+    "id": "TC002",
+    "title": "post api agent missing coin_symbol returns 400",
+    "description": "Test POST /api/agent with missing coin_symbol to verify it returns 400 status with error message."
+  },
+  {
+    "id": "TC003",
+    "title": "post api agent missing contract_address returns 400",
+    "description": "Test POST /api/agent with missing contract_address to verify it returns 400 status with error message."
+  },
+  {
+    "id": "TC004",
+    "title": "post api agent empty payload returns 400",
+    "description": "Test POST /api/agent with empty body to verify it returns 400 status with error message."
+  },
+  {
+    "id": "TC005",
+    "title": "post api agent fake coin returns 200 with fallback",
+    "description": "Test POST /api/agent with fake coin (FAKE) to verify it gracefully degrades and returns 200 (or handles error gracefully without a 500 server crash, or returns 200 with fallback object)."
+  }
+]
