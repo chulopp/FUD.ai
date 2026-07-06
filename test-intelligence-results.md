@@ -1,6 +1,6 @@
 # White-Box Intelligence Test Report (FUD.ai)
 
-This report details the execution and results of the White-Box Intelligence Test performed on 2026-07-06. The test bypasses TestSprite to inspect the internal state routing and LLM reasoning process across 4 real-world evaluation scenarios.
+This report details the execution and results of the White-Box Intelligence Test. The test bypasses TestSprite to inspect the internal state routing and LLM reasoning process across 4 real-world evaluation scenarios.
 
 ---
 
@@ -8,10 +8,10 @@ This report details the execution and results of the White-Box Intelligence Test
 
 | Scenario | Target Token | Scope / Expectation | Verdict | Result |
 |---|---|---|---|---|
-| **Scenario 1** | $WIF (Solana) | RugCheck + Social RapidAPI + Telegram | `IGNORE_FUD` (Confidence 0.9) | ✅ Passed |
-| **Scenario 2** | $PEPE (Ethereum) | GoPlus + DexScreener + Telegram | `IGNORE_FUD` (Confidence 0.8) | ✅ Passed |
-| **Scenario 3** | $TRUMP (Ambiguous) | Forced `FETCH_MORE` ReAct loop | `IGNORE_FUD` (Confidence 0.8) | ✅ Passed |
-| **Scenario 4** | $BTC (Native L1) | Bybit CEX + CoinGecko + Social (No SC) | `HOLD` (Confidence 0.6) | ✅ Passed |
+| **Scenario 1** | $WIF (Solana) | RugCheck + Social RapidAPI + Telegram | `LIQUIDATE_LONGS` (Confidence 0.85) | ✅ Passed |
+| **Scenario 2** | $PEPE (Ethereum) | GoPlus + DexScreener + Telegram | `IGNORE_FUD` (Confidence 0.95) | ✅ Passed |
+| **Scenario 3** | $TRUMP (Ambiguous) | Forced `FETCH_MORE` ReAct loop | `IGNORE_FUD` (Confidence 0.65) | ✅ Passed |
+| **Scenario 4** | $BTC (Native L1) | Bybit CEX + CoinGecko + Social (No SC) | `IGNORE_FUD` (Confidence 0.6) | ✅ Passed |
 
 ---
 
@@ -25,10 +25,10 @@ During the sequential execution of the 4 scenarios, the actual token consumption
 - **1M Output Tokens**: $0.28
 
 ### Consumption & Billing Metrics
-- **Input Tokens (Cache Hit)**: `1,536` ($0.000004 USD)
-- **Input Tokens (Cache Miss)**: `2,863` ($0.000401 USD)
-- **Output Tokens**: `4,538` ($0.001271 USD)
-- **Total Estimated Session Cost**: **$0.001676 USD**
+- **Input Tokens (Cache Hit)**: `6,912` ($0.000019 USD)
+- **Input Tokens (Cache Miss)**: `2,697` ($0.000378 USD)
+- **Output Tokens**: `7,891` ($0.002209 USD)
+- **Total Estimated Session Cost**: **$0.002606 USD**
 
 ---
 
@@ -36,7 +36,7 @@ During the sequential execution of the 4 scenarios, the actual token consumption
 
 ### Scenario 1: Solana FUD Scenario
 - **Query**: "Analyze $WIF on Solana. Are there any critical vulnerabilities in the contract and what is the current Twitter/Telegram sentiment?"
-- **Inputs**: Symbol=WIF, Address=EKpQGSJtj57q6UB4Rfth8a1sJa7c6HP9gW9zZAc1pump, ChainId=solana
+- **Inputs**: Symbol=WIF, Address=EKpQGSJtjMFqKZ9KQanSqYXRcF8fBopzLHYxdM65zcjm, ChainId=solana
 
 ```json
 ==================== [DISPATCHER ROUTING] ====================
@@ -76,29 +76,31 @@ During the sequential execution of the 4 scenarios, the actual token consumption
 ==================== [INGESTION PAYLOAD] ====================
 📊 Ingestion sources populated:
   - [RapidAPI Twitter]: Fetched 19 tweets.
-    Snippet: "@CrimsonPandaNFT: New Listing Around the Corner...  $WIF 👀 The Community Vote Dashboard for $WIF is Now Live for Hol..."
-  - [RugCheck Solana]: Score = undefined, Risks count = 0
-  - [CoinGecko Market]: Price = $undefined, Cap = $undefined
+    Snippet: "@APESZNARMY: $ANSEM mentioned he will be doing a bounty with the solana:JCKwsT8UAbygnFkZ7u3amDUM7BXRtwUhCsHQv2khp..."
+  - [RugCheck Solana]: Score = 1152, Risks count = 1
+  - [DexScreener Pools]: Price = $0.1714, Liquidity = $118827.71
+  - [CoinGecko Market]: Price = $0.171347, Cap = $171163099
 ```
 
 ```json
 ==================== [FINAL AI VERDICT] ====================
 {
-  "drama_index": 10,
-  "dominant_branch": "DeadToken",
+  "drama_index": 85,
+  "dominant_branch": "Rug Pull / Delisting",
   "branch_probabilities": {
-    "DeadToken": 0.9,
-    "UndiscoveredGem": 0.05,
-    "FUDIrrelevant": 0.05
+    "Rug Pull / Delisting": 0.85,
+    "FUD Manipulation": 0.1,
+    "Meme Volatility": 0.05
   },
   "evidence_chain": [
-    "No liquidity on DEX (Liquidity: $0)",
-    "No 24h volume",
-    "Price $0",
-    "FUD claims unrelated to token specifics"
+    "RugCheck flags token as rug with score 1152",
+    "No asks in order book indicating lack of sell-side liquidity",
+    "Low liquidity relative to market cap",
+    "No developer activity or community growth",
+    "Market data shows price decline and low volume"
   ],
-  "executable_verdict": "IGNORE_FUD",
-  "confidence": 0.9,
+  "executable_verdict": "LIQUIDATE_LONGS",
+  "confidence": 0.85,
   "served_from_cache": false,
   "fallback": false
 }
@@ -115,7 +117,6 @@ During the sequential execution of the 4 scenarios, the actual token consumption
 {
   "bybit_v5": {
     "endpoints": {
-      "/v5/market/orderbook": ["a (asks)", "b (bids)"],
       "/v5/market/tickers": ["lastPrice", "price24hPcnt", "volume24h", "bid1Price", "ask1Price"]
     }
   },
@@ -127,12 +128,6 @@ During the sequential execution of the 4 scenarios, the actual token consumption
   "dexscreener": {
     "endpoints": {
       "/latest/dex/pairs/{chainId}/{pairId}": ["priceUsd", "txns.h24", "volume.h24", "priceChange.h24", "liquidity.usd", "fdv", "marketCap"]
-    }
-  },
-  "coingecko": {
-    "endpoints": {
-      "/coins/markets": ["current_price", "market_cap", "total_volume", "price_change_percentage_24h"],
-      "/coins/{id}": ["community_data", "developer_data"]
     }
   },
   "social_rapidapi_twitter": {
@@ -148,29 +143,36 @@ During the sequential execution of the 4 scenarios, the actual token consumption
 ==================== [INGESTION PAYLOAD] ====================
 📊 Ingestion sources populated:
   - [RapidAPI Twitter]: Fetched 19 tweets.
-    Snippet: "@AntiHypeCatNFT: Attention $PEPE Family! YOUR vote matters! Less than 100 votes are needed to list $PEPE on the Moon..."
-  - [CoinGecko Market]: Price = $0.00000263, Cap = $1106265798
+    Snippet: "@RektRoots: $RETWEET reminds me of pre-1B $PEPE \n\n same energy: too simple to fail \n\n not saying it 100x's \n but..."
+```
+
+```text
+==================== [MCTS FETCH_MORE LOOP] ====================
+🔄 LLM requested dynamic fetch step: [MCTS] FETCH_MORE requested (iteration 0): "Need live price, volume, and liquidity data for PEPE on Ethereum; also need recent social sentiment and major exchange listings."
+🔄 [ReAct] Dynamic Fetch triggered for target: Need live price, volume, and liquidity data for PEPE on Ethereum; also need recent social sentiment and major exchange listings.
+⚠️ [Ingestion] DexScreener /tokens/ returned no pairs for 0x6982508145554ce3b5901a7778ad28a500216222. Trying search API fallback...
 ```
 
 ```json
 ==================== [FINAL AI VERDICT] ====================
 {
-  "drama_index": 20,
-  "dominant_branch": "FUD_false",
+  "drama_index": 5,
+  "dominant_branch": "Dead Token",
   "branch_probabilities": {
-    "FUD_false": 0.8,
-    "FUD_partially_true": 0.15,
-    "FUD_legitimate_concerns": 0.05
+    "Dead Token": 0.9,
+    "Dormant Meme": 0.1,
+    "FUD Misdirection": 0
   },
   "evidence_chain": [
-    "CoinGecko shows active trading with $148M volume and $1.1B market cap.",
-    "No delisting news or official warnings found.",
-    "Security data shows no honeypot or mintable flag, risk score 0.",
-    "Low DEX liquidity but token trades primarily on CEXes, explaining DEX data.",
-    "Delisting claim date is Feb 2026, far in future with no evidence."
+    "Zero liquidity",
+    "Zero 24h volume",
+    "Zero price",
+    "Empty order book",
+    "CoinGecko and DeFiLlama data N/A",
+    "FUD claims contradict market reality"
   ],
   "executable_verdict": "IGNORE_FUD",
-  "confidence": 0.8,
+  "confidence": 0.95,
   "served_from_cache": false,
   "fallback": false
 }
@@ -187,14 +189,12 @@ During the sequential execution of the 4 scenarios, the actual token consumption
 {
   "bybit_v5": {
     "endpoints": {
-      "/v5/market/orderbook": ["a (asks)", "b (bids)"],
       "/v5/market/tickers": ["lastPrice", "price24hPcnt", "volume24h", "bid1Price", "ask1Price"]
     }
   },
   "coingecko": {
     "endpoints": {
-      "/coins/markets": ["current_price", "market_cap", "total_volume", "price_change_percentage_24h"],
-      "/coins/{id}": ["community_data"]
+      "/coins/markets": ["current_price", "market_cap", "total_volume", "price_change_percentage_24h"]
     }
   },
   "social_rapidapi_twitter": {
@@ -210,33 +210,33 @@ During the sequential execution of the 4 scenarios, the actual token consumption
 ==================== [INGESTION PAYLOAD] ====================
 📊 Ingestion sources populated:
   - [RapidAPI Twitter]: Fetched 19 tweets.
-    Snippet: "@drummike2012: How does the news that Trump made money on his crypto scam while investors lost theirs sit with MAGA..."
-  - [CoinGecko Market]: Price = $undefined, Cap = $undefined
+    Snippet: "@CaseyVSilver: POTUS PUMP: Dell & Crypto Just Got Trumped 🚀🇺🇸\n\nPresident Trump just put the spotlight on $DELL a..."
+  - [CoinGecko Market]: Price = $1.69, Cap = $401153924
 ```
 
 ```text
 ==================== [MCTS FETCH_MORE LOOP] ====================
-🔄 LLM requested dynamic fetch step: [MCTS] FETCH_MORE requested (iteration 0): "On-chain holder distribution, transaction history, and any records of TRUMP token sales by known insider wallets. Also need historical price and volume data to verify claims of $3.8B losses."
-🔄 [ReAct] Dynamic Fetch triggered for target: On-chain holder distribution, transaction history, and any records of TRUMP token sales by known insider wallets. Also need historical price and volume data to verify claims of $3.8B losses.
+🔄 LLM requested dynamic fetch step: [MCTS] FETCH_MORE requested (iteration 0): "top holder addresses with percentages, exchange listing status, recent on-chain large transfers"
+🔄 [ReAct] Dynamic Fetch triggered for target: top holder addresses with percentages, exchange listing status, recent on-chain large transfers
 ```
 
 ```json
 ==================== [FINAL AI VERDICT] ====================
 {
-  "drama_index": 10,
-  "dominant_branch": "No Market Activity",
+  "drama_index": 30,
+  "dominant_branch": "FUD Overblown",
   "branch_probabilities": {
-    "No Market Activity": 0.95,
-    "Data Error": 0.05
+    "FUD Real": 0.15,
+    "FUD Overblown": 0.7,
+    "Mixed": 0.15
   },
   "evidence_chain": [
-    "No DEX liquidity",
-    "Zero volume",
-    "Price $0",
-    "No active trading"
+    "Price only down 0.47% despite multiple FUD claims",
+    "Security scan shows no honeypot or rug",
+    "Market cap and volume substantial indicating active trading"
   ],
   "executable_verdict": "IGNORE_FUD",
-  "confidence": 0.8,
+  "confidence": 0.65,
   "served_from_cache": false,
   "fallback": false
 }
@@ -254,13 +254,12 @@ During the sequential execution of the 4 scenarios, the actual token consumption
   "bybit_v5": {
     "endpoints": {
       "/v5/market/orderbook": ["a (asks)", "b (bids)"],
-      "/v5/market/tickers": ["lastPrice", "price24hPcnt", "volume24h", "bid1Price", "ask1Price"]
+      "/v5/market/tickers": ["lastPrice", "price24hPcnt", "volume24h"]
     }
   },
   "coingecko": {
     "endpoints": {
-      "/coins/markets": ["current_price", "market_cap", "total_volume", "price_change_percentage_24h"],
-      "/coins/{id}": ["community_data", "developer_data"]
+      "/coins/markets": ["current_price", "market_cap", "total_volume", "price_change_percentage_24h"]
     }
   },
   "social_rapidapi_twitter": {
@@ -276,33 +275,27 @@ During the sequential execution of the 4 scenarios, the actual token consumption
 ==================== [INGESTION PAYLOAD] ====================
 📊 Ingestion sources populated:
   - [RapidAPI Twitter]: Fetched 19 tweets.
-    Snippet: "@GrandePetrolio: Tired of seeing so many $BTC "News" Accounts posting about it "falling below 62,000 again"..."
-  - [CoinGecko Market]: Price = $undefined, Cap = $undefined
-```
-
-```text
-==================== [MCTS FETCH_MORE LOOP] ====================
-🔄 LLM requested dynamic fetch step: [MCTS] FETCH_MORE requested (iteration 0): "perp funding rate, open interest, and order book depth (top 10 bids/asks) from major exchanges"
-🔄 [ReAct] Dynamic Fetch triggered for target: perp funding rate, open interest, and order book depth (top 10 bids/asks) from major exchanges
+    Snippet: "@TokenPulseJP: 【速報⚡】\n\n🇺🇸米司法省法務顧問室、財務省および商務省と緊密に連携し、戦略的 $BTC 準備金設立に向け活動 #米国 #準備金\n\nhttps://t.co/bB3IjKc4vA..."
+  - [CoinGecko Market]: Price = $63784, Cap = $1278617580327
 ```
 
 ```json
 ==================== [FINAL AI VERDICT] ====================
 {
-  "drama_index": 70,
-  "dominant_branch": "Bearish Break",
+  "drama_index": 20,
+  "dominant_branch": "False Alarm",
   "branch_probabilities": {
-    "Bearish Break": 0.4,
-    "Bullish Reversal": 0.3,
-    "Neutral Consolidation": 0.3
+    "False Alarm": 0.7,
+    "Bearish Confirmation": 0.2,
+    "Uncertain": 0.1
   },
   "evidence_chain": [
-    "Order book shows thin support at 62891.2 and ask at 62891.3",
-    "Perpetual funding rate is 0.00443208, positive, indicating long positions paying shorts",
-    "FUD claims widely predict further decline towards 60k-54k",
-    "No significant on-chain anomalies detected (security data not applicable to BTC)"
+    "BTC price increased 1.8% in 24h",
+    "Order book shows low sell pressure",
+    "FUD claim of drop to $83k is inconsistent with current price ($63k)",
+    "No on-chain security issues"
   ],
-  "executable_verdict": "HOLD",
+  "executable_verdict": "IGNORE_FUD",
   "confidence": 0.6,
   "served_from_cache": false,
   "fallback": false
