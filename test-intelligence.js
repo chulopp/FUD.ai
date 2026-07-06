@@ -164,6 +164,22 @@ console.log = function(...args) {
     return;
   }
 
+  if (logStr.includes('[NORMALIZED_METRICS_PAYLOAD]:')) {
+    try {
+      const payloadStr = logStr.split('[NORMALIZED_METRICS_PAYLOAD]:')[1].trim();
+      const payload = JSON.parse(payloadStr);
+      originalLog('\n========== [NORMALIZED DATA PAYLOAD] ==========');
+      originalLog(`Resolved quantitative data sent to LLM:`);
+      originalLog(`  - Price       : $${payload.priceUsd}`);
+      originalLog(`  - 24h Volume  : $${payload.volume24h}`);
+      originalLog(`  - Market Cap  : $${payload.marketCap}`);
+      originalLog(`  - Liquidity   : $${payload.liquidityUsd !== undefined && payload.liquidityUsd !== null ? `$${payload.liquidityUsd}` : 'N/A'}`);
+    } catch (e) {
+      originalLog('Failed to parse normalized metrics payload:', e);
+    }
+    return;
+  }
+
   if (logStr.includes('[Pipeline] Step A complete')) {
     originalLog('\n==================== [INGESTION PAYLOAD] ====================');
     originalLog(`📊 Ingestion sources populated:`);
@@ -287,6 +303,13 @@ async function runTestCases() {
 
     try {
       const verdict = await executeFudAnalysis(tc.symbol, tc.address, tc.chainId);
+      if (verdict && verdict.branch_probabilities) {
+        originalLog('\n========== [MCTS EXPLORATION BRANCHES] ==========');
+        originalLog('Branches evaluated with probabilities:');
+        Object.entries(verdict.branch_probabilities).forEach(([branch, prob]) => {
+          originalLog(`  - ${branch}: ${(prob * 100).toFixed(1)}%`);
+        });
+      }
       originalLog('\nResult Payload:\n', JSON.stringify(verdict, null, 2));
     } catch (e) {
       console.error(`❌ Scenario ${tc.id} failed with error:`, e);

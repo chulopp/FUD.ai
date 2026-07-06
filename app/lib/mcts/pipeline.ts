@@ -301,26 +301,52 @@ export async function executeFudAnalysis(
     
     const isNative = !contractAddress || contractAddress.trim() === "" || contractAddress.toLowerCase() === "native";
 
-    const orderBookPromise = fetchBybitOrderBook(coinSymbol + 'USDT', dispatcherStrategy);
-    const twitterIntelPromise = fetchTwitterIntel(coinSymbol, dispatcherStrategy);
-    const telegramIntelPromise = fetchTelegramIntel(coinSymbol, dispatcherStrategy);
+    const orderBookPromise = fetchBybitOrderBook(coinSymbol + 'USDT', dispatcherStrategy).catch(err => {
+      console.warn(`⚠️ [Pipeline Warning] fetchBybitOrderBook failed:`, err);
+      return { b: [], a: [], fallback: true };
+    });
+    const twitterIntelPromise = fetchTwitterIntel(coinSymbol, dispatcherStrategy).catch(err => {
+      console.warn(`⚠️ [Pipeline Warning] fetchTwitterIntel failed:`, err);
+      return { text: "", fallback: true };
+    });
+    const telegramIntelPromise = fetchTelegramIntel(coinSymbol, dispatcherStrategy).catch(err => {
+      console.warn(`⚠️ [Pipeline Warning] fetchTelegramIntel failed:`, err);
+      return { text: "", fallback: true };
+    });
 
     const dexDataPromise = isNative 
       ? Promise.resolve({ liquidityUsd: 0, volume24h: 0, fdv: 0, priceUsd: "0", fallback: true })
-      : fetchDexScreenerData(contractAddress!, dispatcherStrategy);
+      : fetchDexScreenerData(contractAddress!, dispatcherStrategy).catch(err => {
+          console.warn(`⚠️ [Pipeline Warning] fetchDexScreenerData failed:`, err);
+          return { liquidityUsd: 0, volume24h: 0, fdv: 0, priceUsd: "0", fallback: true };
+        });
 
     const securityGoPlusPromise = isNative
       ? Promise.resolve({ isHoneypot: false, isMintable: false, isOpenSource: false, ownerAddress: "", fallback: true })
-      : fetchGoPlusSecurity(chainId, contractAddress!, dispatcherStrategy);
+      : fetchGoPlusSecurity(chainId, contractAddress!, dispatcherStrategy).catch(err => {
+          console.warn(`⚠️ [Pipeline Warning] fetchGoPlusSecurity failed:`, err);
+          return { isHoneypot: false, isMintable: false, isOpenSource: false, ownerAddress: "", fallback: true };
+        });
 
     const securityRugCheckPromise = isNative
       ? Promise.resolve({ score: 0, risks: [], isRug: false, fallback: true })
-      : fetchRugCheckScore(contractAddress!, dispatcherStrategy);
+      : fetchRugCheckScore(contractAddress!, dispatcherStrategy).catch(err => {
+          console.warn(`⚠️ [Pipeline Warning] fetchRugCheckScore failed:`, err);
+          return { score: 0, risks: [], isRug: false, fallback: true };
+        });
 
-    // DefiLlama & CoinGecko dispatches
-    const defillamaPromise = fetchDefiLlamaProtocols(coinSymbol, dispatcherStrategy);
-    const coingeckoMarketsPromise = fetchCoinGeckoMarkets(coinSymbol, dispatcherStrategy);
-    const coingeckoMacroPromise = fetchCoinGeckoMacro(coinSymbol, dispatcherStrategy);
+    const defillamaPromise = fetchDefiLlamaProtocols(coinSymbol, dispatcherStrategy).catch(err => {
+      console.warn(`⚠️ [Pipeline Warning] fetchDefiLlamaProtocols failed:`, err);
+      return { fallback: true };
+    });
+    const coingeckoMarketsPromise = fetchCoinGeckoMarkets(coinSymbol, dispatcherStrategy).catch(err => {
+      console.warn(`⚠️ [Pipeline Warning] fetchCoinGeckoMarkets failed:`, err);
+      return { fallback: true };
+    });
+    const coingeckoMacroPromise = fetchCoinGeckoMacro(coinSymbol, dispatcherStrategy).catch(err => {
+      console.warn(`⚠️ [Pipeline Warning] fetchCoinGeckoMacro failed:`, err);
+      return { fallback: true };
+    });
 
     const [
       orderBook, 
@@ -345,6 +371,46 @@ export async function executeFudAnalysis(
     ]);
 
     console.log('[Pipeline] Step A complete: all ingestion data gathered.');
+
+    // Normalization and fallback logic for core metrics
+    const finalPrice = (dexData && parseFloat(dexData.priceUsd) > 0) 
+      ? dexData.priceUsd 
+      : ((coingeckoMarkets && coingeckoMarkets.current_price > 0) 
+          ? String(coingeckoMarkets.current_price) 
+          : ((orderBook && orderBook.b && orderBook.b[0] && orderBook.b[0][0])
+              ? String(orderBook.b[0][0])
+              : "0"));
+
+    const finalVolume = (dexData && dexData.volume24h > 0) 
+      ? dexData.volume24h 
+      : ((coingeckoMarkets && coingeckoMarkets.total_volume > 0) 
+          ? coingeckoMarkets.total_volume 
+          : 0);
+
+    const finalFDV = (dexData && dexData.fdv > 0) 
+      ? dexData.fdv 
+      : ((coingeckoMarkets && coingeckoMarkets.market_cap > 0) 
+          ? coingeckoMarkets.market_cap 
+          : 0);
+
+    const finalLiquidity = (dexData && dexData.liquidityUsd > 0) 
+      ? dexData.liquidityUsd 
+      : 0;
+
+    const normalizedDexData = {
+      ...dexData,
+      priceUsd: finalPrice,
+      volume24h: finalVolume,
+      fdv: finalFDV,
+      liquidityUsd: finalLiquidity
+    };
+
+    console.log('[NORMALIZED_METRICS_PAYLOAD]:', JSON.stringify({
+      priceUsd: normalizedDexData.priceUsd,
+      volume24h: normalizedDexData.volume24h,
+      marketCap: normalizedDexData.fdv,
+      liquidityUsd: normalizedDexData.liquidityUsd
+    }));
 
     // ── STEP B: Lightweight noise filter ─────────────────────
     const socialRaw = `Twitter:\n${twitterIntel.text}\n\nTelegram:\n${telegramIntel.text}`;
@@ -373,7 +439,7 @@ export async function executeFudAnalysis(
       contractAddress,
       chainId,
       orderBook,
-      dexData,
+      dexData: normalizedDexData,
       securityGoPlus,
       securityRugCheck,
       twitterIntel,
