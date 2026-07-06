@@ -9,9 +9,9 @@ export async function POST(req: NextRequest) {
     const { coin_symbol, contract_address, chain_id } = body;
 
     // Validate required fields
-    if (!coin_symbol || !contract_address) {
+    if (!coin_symbol) {
       return NextResponse.json(
-        { error: "Missing required parameters: coin_symbol and contract_address are required." },
+        { error: "Missing required parameter: coin_symbol is required." },
         { status: 400 }
       );
     }

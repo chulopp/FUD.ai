@@ -1,7 +1,16 @@
-import { fetchBybitOrderBook, fetchBybitPerpetuals, fetchDexScreenerData } from '../ingestion/market';
+import { 
+  fetchBybitOrderBook, 
+  fetchBybitPerpetuals, 
+  fetchDexScreenerData, 
+  fetchDefiLlamaProtocols, 
+  fetchCoinGeckoMarkets, 
+  fetchCoinGeckoMacro 
+} from '../ingestion/market';
 import { fetchGoPlusSecurity, fetchRugCheckScore } from '../ingestion/security';
-import { fetchTwitterIntel, fetchTelegramIntel } from '../ingestion/social';
+import { fetchTwitterIntel } from '../ingestion/rapidapi_twitter';
+import { fetchTelegramIntel } from '../ingestion/telegram';
 import { runLightweightEngine, runHeavyweightEngine } from '../llm/engines';
+import { runGranularDispatcher } from './dispatcher';
 
 // ─────────────────────────────────────────────────────────────
 // Types
@@ -9,7 +18,7 @@ import { runLightweightEngine, runHeavyweightEngine } from '../llm/engines';
 
 interface PipelineContext {
   coinSymbol: string;
-  contractAddress: string;
+  contractAddress?: string;
   chainId: string;
   // Ingestion results
   orderBook: Awaited<ReturnType<typeof fetchBybitOrderBook>>;
@@ -18,6 +27,10 @@ interface PipelineContext {
   securityRugCheck: Awaited<ReturnType<typeof fetchRugCheckScore>>;
   twitterIntel: { text: string; fallback: boolean };
   telegramIntel: { text: string; fallback: boolean };
+  // Dispatcher optional metrics
+  coingeckoMarkets?: Awaited<ReturnType<typeof fetchCoinGeckoMarkets>>;
+  coingeckoMacro?: Awaited<ReturnType<typeof fetchCoinGeckoMacro>>;
+  defillamaProtocols?: Awaited<ReturnType<typeof fetchDefiLlamaProtocols>>;
   // Filtered FUD claims from Lightweight Engine
   fudClaims: string[];
   // Optional: dynamically fetched perps data (ReAct Step D)
@@ -88,10 +101,15 @@ async function handleDynamicFetch(
   const t = target.toLowerCase();
   try {
     if (t.includes('perp') || t.includes('open interest') || t.includes('funding')) {
+      // Fetch without strategy parameter to bypass dispatcher filtering for dynamic ReAct fetching
       const perpData = await fetchBybitPerpetuals(context.coinSymbol + 'USDT');
       return `Perpetuals data for ${context.coinSymbol}: Open Interest = ${perpData.openInterest}, Funding Rate = ${perpData.fundingRate}`;
     }
     if (t.includes('liquidity') || t.includes('dex') || t.includes('volume')) {
+      if (!context.contractAddress || context.contractAddress.toLowerCase() === 'native') {
+        return `DEX data: Liquidity = $0 (Native token, no DEX pools searched), 24h Volume = $0, Price = $0`;
+      }
+      // Fetch without strategy parameter to bypass dispatcher filtering for dynamic ReAct fetching
       const dex = await fetchDexScreenerData(context.contractAddress);
       return `DEX data: Liquidity = $${dex.liquidityUsd}, 24h Volume = $${dex.volume24h}, Price = $${dex.priceUsd}`;
     }
@@ -141,6 +159,21 @@ Price: $${context.dexData.priceUsd}
 === SECURITY DATA ===
 GoPlus — Honeypot: ${context.securityGoPlus.isHoneypot}, Mintable: ${context.securityGoPlus.isMintable}, Open Source: ${context.securityGoPlus.isOpenSource}
 RugCheck — Risk Score: ${context.securityRugCheck.score}, Risk Flags: ${context.securityRugCheck.risks}, Is Rug: ${context.securityRugCheck.isRug}
+
+${context.coingeckoMarkets ? `=== COINGECKO MARKETS ===
+Price: ${context.coingeckoMarkets.current_price || "N/A"}
+Market Cap: ${context.coingeckoMarkets.market_cap || "N/A"}
+Total Volume: ${context.coingeckoMarkets.total_volume || "N/A"}
+Price Change 24h: ${context.coingeckoMarkets.price_change_percentage_24h || "N/A"}%` : ''}
+
+${context.coingeckoMacro ? `=== COINGECKO MACRO & METRICS ===
+Community Followers / Activity: ${JSON.stringify(context.coingeckoMacro.community_data || "N/A")}
+Developer Commits / Activity: ${JSON.stringify(context.coingeckoMacro.developer_data || "N/A")}` : ''}
+
+${context.defillamaProtocols ? `=== DEFILLAMA TVL ===
+TVL: $${context.defillamaProtocols.tvl || "N/A"}
+Change 1d: ${context.defillamaProtocols.change_1d || "N/A"}%
+Change 7d: ${context.defillamaProtocols.change_7d || "N/A"}%` : ''}
 
 === FUD CLAIMS (Social Intel) ===
 ${context.fudClaims.length > 0 ? context.fudClaims.map((c, i) => `${i + 1}. ${c}`).join('\n') : 'No specific FUD claims detected.'}
@@ -239,7 +272,7 @@ function buildVerdict(parsed: Record<string, unknown>): VerdictResult {
 
 export async function executeFudAnalysis(
   coinSymbol: string,
-  contractAddress: string,
+  contractAddress?: string,
   chainId: string = '1'
 ): Promise<VerdictResult> {
   const FALLBACK: VerdictResult = {
@@ -254,17 +287,62 @@ export async function executeFudAnalysis(
   };
 
   try {
+    // ── STEP 0: Granular Dispatcher ───────────────────────────
+    console.log("🚦 [STEP 0] Invoking Granular Dispatcher...");
+    const dispatcherStrategy = await runGranularDispatcher({
+      coinSymbol,
+      contractAddress,
+      chainId
+    });
+    console.log("[DISPATCHER THINKING PROCESS]:", JSON.stringify(dispatcherStrategy, null, 2));
+
     // ── STEP A: Parallel ingestion ────────────────────────────
     console.log("🔍 [STEP A] Gathering data for:", coinSymbol);
-    const [orderBook, dexData, securityGoPlus, securityRugCheck, twitterIntel, telegramIntel] =
-      await Promise.all([
-        fetchBybitOrderBook(coinSymbol + 'USDT'),
-        fetchDexScreenerData(contractAddress),
-        fetchGoPlusSecurity(chainId, contractAddress),
-        fetchRugCheckScore(contractAddress),
-        fetchTwitterIntel(coinSymbol),
-        fetchTelegramIntel(coinSymbol),
-      ]);
+    
+    const isNative = !contractAddress || contractAddress.trim() === "" || contractAddress.toLowerCase() === "native";
+
+    const orderBookPromise = fetchBybitOrderBook(coinSymbol + 'USDT', dispatcherStrategy);
+    const twitterIntelPromise = fetchTwitterIntel(coinSymbol, dispatcherStrategy);
+    const telegramIntelPromise = fetchTelegramIntel(coinSymbol, dispatcherStrategy);
+
+    const dexDataPromise = isNative 
+      ? Promise.resolve({ liquidityUsd: 0, volume24h: 0, fdv: 0, priceUsd: "0", fallback: true })
+      : fetchDexScreenerData(contractAddress!, dispatcherStrategy);
+
+    const securityGoPlusPromise = isNative
+      ? Promise.resolve({ isHoneypot: false, isMintable: false, isOpenSource: false, ownerAddress: "", fallback: true })
+      : fetchGoPlusSecurity(chainId, contractAddress!, dispatcherStrategy);
+
+    const securityRugCheckPromise = isNative
+      ? Promise.resolve({ score: 0, risks: [], isRug: false, fallback: true })
+      : fetchRugCheckScore(contractAddress!, dispatcherStrategy);
+
+    // DefiLlama & CoinGecko dispatches
+    const defillamaPromise = fetchDefiLlamaProtocols(coinSymbol, dispatcherStrategy);
+    const coingeckoMarketsPromise = fetchCoinGeckoMarkets(coinSymbol, dispatcherStrategy);
+    const coingeckoMacroPromise = fetchCoinGeckoMacro(coinSymbol, dispatcherStrategy);
+
+    const [
+      orderBook, 
+      dexData, 
+      securityGoPlus, 
+      securityRugCheck, 
+      twitterIntel, 
+      telegramIntel,
+      defillamaProtocols,
+      coingeckoMarkets,
+      coingeckoMacro
+    ] = await Promise.all([
+      orderBookPromise,
+      dexDataPromise,
+      securityGoPlusPromise,
+      securityRugCheckPromise,
+      twitterIntelPromise,
+      telegramIntelPromise,
+      defillamaPromise,
+      coingeckoMarketsPromise,
+      coingeckoMacroPromise
+    ]);
 
     console.log('[Pipeline] Step A complete: all ingestion data gathered.');
 
@@ -300,6 +378,9 @@ export async function executeFudAnalysis(
       securityRugCheck,
       twitterIntel,
       telegramIntel,
+      coingeckoMarkets,
+      coingeckoMacro,
+      defillamaProtocols,
       fudClaims,
     };
 

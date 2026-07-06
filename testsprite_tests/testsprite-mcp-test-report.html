@@ -1213,7 +1213,7 @@ body {
         </div>
         <div class="metadata-row">
           <div class="metadata-label text-body-medium">Date</div>
-          <div class="metadata-value text-body">7/5/2026</div>
+          <div class="metadata-value text-body">7/6/2026</div>
         </div>
         <div class="metadata-row">
           <div class="metadata-label text-body-medium">Prepared by</div>
@@ -1238,8 +1238,8 @@ body {
             <li><span class="coverage-highlight">Key gaps / risks:</span>
             
               <ul>
-<li><strong>External API Dependency Reliability:</strong> Since the pipeline relies on multiple external market &amp; security APIs (GoPlus, RugCheck, DexScreener, Bybit), network errors or rate-limiting on these third-party endpoints could trigger the fallback mode. Correct handling is implemented, but rate limits should be monitored.</li>
-<li><strong>Cache Implementation:</strong> Semantic caching (Redis TTL 5m) is outlined in the PRD but not yet implemented. Once implemented, tests should verify cache hit response states.</li>
+<li><strong>Network Latency &amp; Timeouts:</strong> High processing latency (45-90s) is typical when interacting with DeepSeek and executing multiple parallel scraping operations. The TestSprite runner configuration was patched with a 120s timeout to prevent execution timeouts.</li>
+<li><strong>Scraper Reliability:</strong> Scrapers (cheerio/native Telegram/Twitter) depend heavily on target structure and may degrade over time, leading to higher fallback triggers. Semantic cache integration is recommended as the next major performance addition.</li>
 </ul>
 
             </li>
@@ -1265,17 +1265,17 @@ body {
           <div class="table-rows">
             
             <div class="table-row">
-              <div class="table-cell"><span class="text-body">Requirement: API Parameter Validation</span></div>
-              <div class="table-cell"><span class="text-body">3</span></div>
-              <div class="table-cell"><span class="text-body">3</span></div>
+              <div class="table-cell"><span class="text-body">Requirement: Input Validation & Parameter Gating</span></div>
+              <div class="table-cell"><span class="text-body">1</span></div>
+              <div class="table-cell"><span class="text-body">1</span></div>
               <div class="table-cell"><span class="text-body">0</span></div>
             </div>
         
 
             <div class="table-row">
-              <div class="table-cell"><span class="text-body">Requirement: FUD Analysis & Reasoning Pipeline</span></div>
-              <div class="table-cell"><span class="text-body">2</span></div>
-              <div class="table-cell"><span class="text-body">2</span></div>
+              <div class="table-cell"><span class="text-body">Requirement: FUD Analysis & MCTS Reasoning Pipeline</span></div>
+              <div class="table-cell"><span class="text-body">4</span></div>
+              <div class="table-cell"><span class="text-body">4</span></div>
               <div class="table-cell"><span class="text-body">0</span></div>
             </div>
         
@@ -1299,13 +1299,13 @@ body {
           <div class="accordion-header" onclick="toggleAccordion(this)">
             <div class="requirement-content">
                                           <div class="requirement-title-row">
-              <h3 class="title-requirement">Requirement: API Parameter Validation</h3>
+              <h3 class="title-requirement">Requirement: Input Validation & Parameter Gating</h3>
                 <div class="requirement-status-tag status-success">
               <svg width="18" height="18" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
                 <circle cx="7.99961" cy="7.99998" r="6.4" fill="#10A363" fill-opacity="0.2"/>
                 <path d="M5.59961 8.00002L7.19961 9.60002L10.3996 6.40002" stroke="#19C379" stroke-width="1.28" stroke-linecap="round" stroke-linejoin="round"/>
               </svg>
-              <span>3/3</span>
+              <span>1/1</span>
             </div>
               </div>
               <p class="text-body-medium requirement-description">Proper error handling for API calls and invalid data scenarios.</p>
@@ -1321,7 +1321,7 @@ body {
             <div class="test-wrapper">
 <div class="test-card">
                 <div class="test-header">
-                  <h4 class="text-body-medium">TC002 post api agent missing coin_symbol returns 400</h4>
+                  <h4 class="text-body-medium">TC002 — POST /api/agent missing coin_symbol returns 400</h4>
                 </div>
                 <div class="test-content">
                   <div class="test-field">
@@ -1337,7 +1337,7 @@ body {
                   <div class="test-field">
                     <div class="test-field-label text-body-medium">Test Visualization and Result</div>
                     <div class="test-field-value text-body">
-                      <a href="[TestSprite Dashboard](https://www.testsprite.com/dashboard/mcp/tests/4fd382bb-67c1-476d-80e4-bb1ec70efc1f/280902c7-145a-4ceb-8251-ca9f41e9d85d)" class="text-link">View Results</a>
+                      <a href="[TestSprite Dashboard](https://www.testsprite.com/dashboard/mcp/tests/0cdc5f2f-1860-4b0c-adc2-28c75f60cdde/33e00523-aede-4910-acf6-d2b9287165e1)" class="text-link">View Results</a>
                     </div>
                   </div>
                   <div class="test-field">
@@ -1360,97 +1360,7 @@ body {
                   </div>
                   <div class="test-field">
                     <div class="test-field-label text-body-medium">Analysis / Findings</div>
-                    <div class="test-field-value text-body">Correctly returns 400 Bad Request and expected error JSON when `coin_symbol` is missing.</div>
-                  </div>
-                </div>
-              </div>
-<div class="test-card">
-                <div class="test-header">
-                  <h4 class="text-body-medium">TC003 post api agent missing contract_address returns 400</h4>
-                </div>
-                <div class="test-content">
-                  <div class="test-field">
-                    <div class="test-field-label text-body-medium">Test Code</div>
-                    <div class="test-field-value text-body">
-                      <a href="./TC003_post_api_agent_missing_contract_address_returns_400.py" class="text-link">TC003_post_api_agent_missing_contract_address_returns_400.py</a>
-                    </div>
-                  </div>
-                  <div class="test-field">
-                    <div class="test-field-label text-body-medium">Test Error</div>
-                    <div class="test-field-value text-body">None</div>
-                  </div>
-                  <div class="test-field">
-                    <div class="test-field-label text-body-medium">Test Visualization and Result</div>
-                    <div class="test-field-value text-body">
-                      <a href="[TestSprite Dashboard](https://www.testsprite.com/dashboard/mcp/tests/4fd382bb-67c1-476d-80e4-bb1ec70efc1f/ada02e85-e68e-48ca-b2b9-3f3d61173e54)" class="text-link">View Results</a>
-                    </div>
-                  </div>
-                  <div class="test-field">
-                    <div class="test-field-label text-body-medium">Status</div>
-                    <div class="test-field-value">
-                      <div class="status-wrapper">
-                <div class="status-icon">
-                    <svg width="18" height="18" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
-                        <circle cx="7.99961" cy="7.99998" r="6.4" fill="#10A363" fill-opacity="0.2"/>
-                        <path d="M5.59961 8.00002L7.19961 9.60002L10.3996 6.40002" stroke="#19C379" stroke-width="1.28" stroke-linecap="round" stroke-linejoin="round"/>
-                    </svg>
-                </div>
-                <span class="text-body status-pass">Pass</span>
-            </div>
-                    </div>
-                  </div>
-                  <div class="test-field">
-                    <div class="test-field-label text-body-medium">Severity</div>
-                    <div class="test-field-value text-body">LOW</div>
-                  </div>
-                  <div class="test-field">
-                    <div class="test-field-label text-body-medium">Analysis / Findings</div>
-                    <div class="test-field-value text-body">Correctly returns 400 Bad Request and expected error JSON when `contract_address` is missing.</div>
-                  </div>
-                </div>
-              </div>
-<div class="test-card">
-                <div class="test-header">
-                  <h4 class="text-body-medium">TC004 post api agent empty payload returns 400</h4>
-                </div>
-                <div class="test-content">
-                  <div class="test-field">
-                    <div class="test-field-label text-body-medium">Test Code</div>
-                    <div class="test-field-value text-body">
-                      <a href="./TC004_post_api_agent_empty_payload_returns_400.py" class="text-link">TC004_post_api_agent_empty_payload_returns_400.py</a>
-                    </div>
-                  </div>
-                  <div class="test-field">
-                    <div class="test-field-label text-body-medium">Test Error</div>
-                    <div class="test-field-value text-body">None</div>
-                  </div>
-                  <div class="test-field">
-                    <div class="test-field-label text-body-medium">Test Visualization and Result</div>
-                    <div class="test-field-value text-body">
-                      <a href="[TestSprite Dashboard](https://www.testsprite.com/dashboard/mcp/tests/4fd382bb-67c1-476d-80e4-bb1ec70efc1f/c71e5e77-a4b9-451c-bc42-82fe327c11c2)" class="text-link">View Results</a>
-                    </div>
-                  </div>
-                  <div class="test-field">
-                    <div class="test-field-label text-body-medium">Status</div>
-                    <div class="test-field-value">
-                      <div class="status-wrapper">
-                <div class="status-icon">
-                    <svg width="18" height="18" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
-                        <circle cx="7.99961" cy="7.99998" r="6.4" fill="#10A363" fill-opacity="0.2"/>
-                        <path d="M5.59961 8.00002L7.19961 9.60002L10.3996 6.40002" stroke="#19C379" stroke-width="1.28" stroke-linecap="round" stroke-linejoin="round"/>
-                    </svg>
-                </div>
-                <span class="text-body status-pass">Pass</span>
-            </div>
-                    </div>
-                  </div>
-                  <div class="test-field">
-                    <div class="test-field-label text-body-medium">Severity</div>
-                    <div class="test-field-value text-body">LOW</div>
-                  </div>
-                  <div class="test-field">
-                    <div class="test-field-label text-body-medium">Analysis / Findings</div>
-                    <div class="test-field-value text-body">Rejects empty JSON payloads with a clean 400 Bad Request response.</div>
+                    <div class="test-field-value text-body">Route correctly validates the payload and short-circuits with a 400 Bad Request status code when `coin_symbol` is missing.</div>
                   </div>
                 </div>
               </div>
@@ -1462,13 +1372,13 @@ body {
           <div class="accordion-header" onclick="toggleAccordion(this)">
             <div class="requirement-content">
                                           <div class="requirement-title-row">
-              <h3 class="title-requirement">Requirement: FUD Analysis & Reasoning Pipeline</h3>
+              <h3 class="title-requirement">Requirement: FUD Analysis & MCTS Reasoning Pipeline</h3>
                 <div class="requirement-status-tag status-success">
               <svg width="18" height="18" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
                 <circle cx="7.99961" cy="7.99998" r="6.4" fill="#10A363" fill-opacity="0.2"/>
                 <path d="M5.59961 8.00002L7.19961 9.60002L10.3996 6.40002" stroke="#19C379" stroke-width="1.28" stroke-linecap="round" stroke-linejoin="round"/>
               </svg>
-              <span>2/2</span>
+              <span>4/4</span>
             </div>
               </div>
               <p class="text-body-medium requirement-description">Proper error handling for API calls and invalid data scenarios.</p>
@@ -1484,13 +1394,13 @@ body {
             <div class="test-wrapper">
 <div class="test-card">
                 <div class="test-header">
-                  <h4 class="text-body-medium">TC001 post api agent valid request returns analysis verdict</h4>
+                  <h4 class="text-body-medium">TC001 — POST /api/agent valid EVM token returns structured verdict</h4>
                 </div>
                 <div class="test-content">
                   <div class="test-field">
                     <div class="test-field-label text-body-medium">Test Code</div>
                     <div class="test-field-value text-body">
-                      <a href="./TC001_post_api_agent_valid_request_returns_analysis_verdict.py" class="text-link">TC001_post_api_agent_valid_request_returns_analysis_verdict.py</a>
+                      <a href="./TC001_post_api_agent_valid_EVM_token_returns_structured_verdict.py" class="text-link">TC001_post_api_agent_valid_EVM_token_returns_structured_verdict.py</a>
                     </div>
                   </div>
                   <div class="test-field">
@@ -1500,7 +1410,7 @@ body {
                   <div class="test-field">
                     <div class="test-field-label text-body-medium">Test Visualization and Result</div>
                     <div class="test-field-value text-body">
-                      <a href="[TestSprite Dashboard](https://www.testsprite.com/dashboard/mcp/tests/4fd382bb-67c1-476d-80e4-bb1ec70efc1f/414da688-fcea-4931-b525-9f790faaa84f)" class="text-link">View Results</a>
+                      <a href="[TestSprite Dashboard](https://www.testsprite.com/dashboard/mcp/tests/0cdc5f2f-1860-4b0c-adc2-28c75f60cdde/a9ac7dba-859c-41e2-be94-e4ff4d7f8a39)" class="text-link">View Results</a>
                     </div>
                   </div>
                   <div class="test-field">
@@ -1519,23 +1429,23 @@ body {
                   </div>
                   <div class="test-field">
                     <div class="test-field-label text-body-medium">Severity</div>
-                    <div class="test-field-value text-body">LOW</div>
+                    <div class="test-field-value text-body">CRITICAL</div>
                   </div>
                   <div class="test-field">
                     <div class="test-field-label text-body-medium">Analysis / Findings</div>
-                    <div class="test-field-value text-body">Pipeline executes successfully and returns a complete 200 response matching the required schema.</div>
+                    <div class="test-field-value text-body">Full pipeline runs successfully with an EVM token (`DOGE` + CA). Response matches the schema containing all 8 required properties. `fallback=false`.</div>
                   </div>
                 </div>
               </div>
 <div class="test-card">
                 <div class="test-header">
-                  <h4 class="text-body-medium">TC005 post api agent fake coin returns 200 with fallback</h4>
+                  <h4 class="text-body-medium">TC003 — POST /api/agent native token BTC without contract_address returns 200</h4>
                 </div>
                 <div class="test-content">
                   <div class="test-field">
                     <div class="test-field-label text-body-medium">Test Code</div>
                     <div class="test-field-value text-body">
-                      <a href="./TC005_post_api_agent_fake_coin_returns_200_with_fallback.py" class="text-link">TC005_post_api_agent_fake_coin_returns_200_with_fallback.py</a>
+                      <a href="./TC003_post_api_agent_native_token_without_contract_address_returns_200.py" class="text-link">TC003_post_api_agent_native_token_without_contract_address_returns_200.py</a>
                     </div>
                   </div>
                   <div class="test-field">
@@ -1545,7 +1455,7 @@ body {
                   <div class="test-field">
                     <div class="test-field-label text-body-medium">Test Visualization and Result</div>
                     <div class="test-field-value text-body">
-                      <a href="[TestSprite Dashboard](https://www.testsprite.com/dashboard/mcp/tests/4fd382bb-67c1-476d-80e4-bb1ec70efc1f/e300383e-af69-4e1f-9b36-7cbce052e7c5)" class="text-link">View Results</a>
+                      <a href="[TestSprite Dashboard](https://www.testsprite.com/dashboard/mcp/tests/0cdc5f2f-1860-4b0c-adc2-28c75f60cdde/6a5ccc11-071a-4ec6-a845-1bcbd383dc09)" class="text-link">View Results</a>
                     </div>
                   </div>
                   <div class="test-field">
@@ -1564,11 +1474,101 @@ body {
                   </div>
                   <div class="test-field">
                     <div class="test-field-label text-body-medium">Severity</div>
-                    <div class="test-field-value text-body">LOW</div>
+                    <div class="test-field-value text-body">HIGH</div>
                   </div>
                   <div class="test-field">
                     <div class="test-field-label text-body-medium">Analysis / Findings</div>
-                    <div class="test-field-value text-body">When a fake coin is evaluated (triggering pipeline fallbacks), the route gracefully degrades to return a valid 200 response with all schema fields present and fallback indicators enabled. No server crashes or 500 errors were observed.</div>
+                    <div class="test-field-value text-body">Native token mode (no contract address) is successfully processed by the Dispatcher, bypassing on-chain DEX/security fetches, and correctly runs the social + LLM evaluation returning a structured verdict.</div>
+                  </div>
+                </div>
+              </div>
+<div class="test-card">
+                <div class="test-header">
+                  <h4 class="text-body-medium">TC004 — POST /api/agent SOL with contract_address=native returns 200</h4>
+                </div>
+                <div class="test-content">
+                  <div class="test-field">
+                    <div class="test-field-label text-body-medium">Test Code</div>
+                    <div class="test-field-value text-body">
+                      <a href="./TC004_post_api_agent_Solana_token_with_native_contract_address_returns_200.py" class="text-link">TC004_post_api_agent_Solana_token_with_native_contract_address_returns_200.py</a>
+                    </div>
+                  </div>
+                  <div class="test-field">
+                    <div class="test-field-label text-body-medium">Test Error</div>
+                    <div class="test-field-value text-body">None</div>
+                  </div>
+                  <div class="test-field">
+                    <div class="test-field-label text-body-medium">Test Visualization and Result</div>
+                    <div class="test-field-value text-body">
+                      <a href="[TestSprite Dashboard](https://www.testsprite.com/dashboard/mcp/tests/0cdc5f2f-1860-4b0c-adc2-28c75f60cdde/c33e9775-1984-47e4-af2e-c43690c41b93)" class="text-link">View Results</a>
+                    </div>
+                  </div>
+                  <div class="test-field">
+                    <div class="test-field-label text-body-medium">Status</div>
+                    <div class="test-field-value">
+                      <div class="status-wrapper">
+                <div class="status-icon">
+                    <svg width="18" height="18" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
+                        <circle cx="7.99961" cy="7.99998" r="6.4" fill="#10A363" fill-opacity="0.2"/>
+                        <path d="M5.59961 8.00002L7.19961 9.60002L10.3996 6.40002" stroke="#19C379" stroke-width="1.28" stroke-linecap="round" stroke-linejoin="round"/>
+                    </svg>
+                </div>
+                <span class="text-body status-pass">Pass</span>
+            </div>
+                    </div>
+                  </div>
+                  <div class="test-field">
+                    <div class="test-field-label text-body-medium">Severity</div>
+                    <div class="test-field-value text-body">HIGH</div>
+                  </div>
+                  <div class="test-field">
+                    <div class="test-field-label text-body-medium">Analysis / Findings</div>
+                    <div class="test-field-value text-body">Validates `contract_address="native"` sentinel parsing for Solana. Pipeline skips Ethereum-specific contract queries and runs the MCTS logic successfully.</div>
+                  </div>
+                </div>
+              </div>
+<div class="test-card">
+                <div class="test-header">
+                  <h4 class="text-body-medium">TC005 — POST /api/agent unknown fake coin returns 200 with fallback indicators</h4>
+                </div>
+                <div class="test-content">
+                  <div class="test-field">
+                    <div class="test-field-label text-body-medium">Test Code</div>
+                    <div class="test-field-value text-body">
+                      <a href="./TC005_post_api_agent_unknown_fake_coin_returns_200_with_fallback_indicators.py" class="text-link">TC005_post_api_agent_unknown_fake_coin_returns_200_with_fallback_indicators.py</a>
+                    </div>
+                  </div>
+                  <div class="test-field">
+                    <div class="test-field-label text-body-medium">Test Error</div>
+                    <div class="test-field-value text-body">None</div>
+                  </div>
+                  <div class="test-field">
+                    <div class="test-field-label text-body-medium">Test Visualization and Result</div>
+                    <div class="test-field-value text-body">
+                      <a href="[TestSprite Dashboard](https://www.testsprite.com/dashboard/mcp/tests/0cdc5f2f-1860-4b0c-adc2-28c75f60cdde/8a447f4f-8bee-4f58-a239-f7ca17768aa2)" class="text-link">View Results</a>
+                    </div>
+                  </div>
+                  <div class="test-field">
+                    <div class="test-field-label text-body-medium">Status</div>
+                    <div class="test-field-value">
+                      <div class="status-wrapper">
+                <div class="status-icon">
+                    <svg width="18" height="18" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
+                        <circle cx="7.99961" cy="7.99998" r="6.4" fill="#10A363" fill-opacity="0.2"/>
+                        <path d="M5.59961 8.00002L7.19961 9.60002L10.3996 6.40002" stroke="#19C379" stroke-width="1.28" stroke-linecap="round" stroke-linejoin="round"/>
+                    </svg>
+                </div>
+                <span class="text-body status-pass">Pass</span>
+            </div>
+                    </div>
+                  </div>
+                  <div class="test-field">
+                    <div class="test-field-label text-body-medium">Severity</div>
+                    <div class="test-field-value text-body">MEDIUM</div>
+                  </div>
+                  <div class="test-field">
+                    <div class="test-field-label text-body-medium">Analysis / Findings</div>
+                    <div class="test-field-value text-body">Evaluates fallback resilience. With a non-existent fake token, the pipeline degrades gracefully to fallback values rather than throwing a 500 error, outputting structured fallback verdict metrics.</div>
                   </div>
                 </div>
               </div>

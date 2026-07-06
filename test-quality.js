@@ -1,7 +1,7 @@
 const payloads = [
-  { coin_symbol: "ANSEM", contract_address: "8q4v1uA5gJt3u8CgG82wUu3V9H1R3K3X5x5E5C4w4o4" },
-  { coin_symbol: "BTC", contract_address: "native" },
-  { coin_symbol: "HYPE", contract_address: "0x0000000000000000000000000000000000000000" }
+  { coin_symbol: "ANSEM", contract_address: "9cRCn9rGT8V2imeM2BaKs13yhMEais3ruM3rPvTGpump" },
+  { coin_symbol: "BTC" },
+  { coin_symbol: "HYPE" }
 ];
 
 async function delay(ms) {
