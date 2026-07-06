@@ -239,7 +239,7 @@ const scenarios = [
     name: "Solana FUD Scenario",
     query: "Analyze $WIF on Solana. Are there any critical vulnerabilities in the contract and what is the current Twitter/Telegram sentiment?",
     symbol: "WIF",
-    address: "EKpQGSJtj57q6UB4Rfth8a1sJa7c6HP9gW9zZAc1pump",
+    address: "EKpQGSJtjMFqKZ9KQanSqYXRcF8fBopzLHYxdM65zcjm",
     chainId: "solana"
   },
   {

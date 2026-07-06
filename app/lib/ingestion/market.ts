@@ -120,7 +120,18 @@ export async function fetchDexScreenerData(contractAddress: string, strategy?: D
         }
         
         const data = await response.json();
-        const pair = data?.pairs?.[0] || {};
+        let pairs = data?.pairs;
+        if (!pairs || pairs.length === 0) {
+            console.log(`⚠️ [Ingestion] DexScreener /tokens/ returned no pairs for ${contractAddress}. Trying search API fallback...`);
+            const searchResponse = await fetch(`https://api.dexscreener.com/latest/dex/search?q=${encodeURIComponent(contractAddress)}`);
+            if (searchResponse.ok) {
+                const searchData = await searchResponse.json();
+                if (searchData?.pairs && searchData.pairs.length > 0) {
+                    pairs = searchData.pairs;
+                }
+            }
+        }
+        const pair = (pairs && pairs[0]) || {};
         
         const requestedFields = strategy?.dexscreener?.endpoints?.["/latest/dex/pairs/{chainId}/{pairId}"];
         const result: any = { fallback: false };
@@ -189,18 +200,76 @@ export async function fetchDefiLlamaProtocols(coinSymbol: string, strategy?: Dis
     }
 }
 
-export async function fetchCoinGeckoMarkets(coinId: string, strategy?: DispatcherStrategy) {
+const coingeckoIdCache = new Map<string, string>();
+
+async function resolveCoinGeckoId(symbol: string): Promise<string> {
+    const trimmed = symbol.trim();
+    if (!trimmed) return '';
+    const norm = trimmed.toUpperCase();
+    if (coingeckoIdCache.has(norm)) {
+        return coingeckoIdCache.get(norm)!;
+    }
+    
+    try {
+        const apiKey = process.env.COINGECKO_API_KEY;
+        const headers: Record<string, string> = { 'Accept': 'application/json' };
+        if (apiKey) headers['x-cg-demo-api-key'] = apiKey;
+
+        const response = await fetch(`https://api.coingecko.com/api/v3/search?query=${encodeURIComponent(trimmed)}`, { headers });
+        if (!response.ok) {
+            throw new Error(`CoinGecko search failed with status ${response.status}`);
+        }
+        const data = await response.json();
+        const coins = data?.coins || [];
+        if (coins.length === 0) {
+            return trimmed.toLowerCase();
+        }
+
+        const normSymbol = trimmed.toUpperCase();
+        
+        // Find all coins matching the exact symbol or name or ID (case-insensitive)
+        const exactMatches = coins.filter((c: any) => 
+            (c.symbol && c.symbol.toUpperCase() === normSymbol) || 
+            (c.name && c.name.toUpperCase() === normSymbol) || 
+            (c.id && c.id.toUpperCase() === normSymbol)
+        );
+
+        let resolvedId = trimmed.toLowerCase();
+        if (exactMatches.length > 0) {
+            // Sort by market_cap_rank (smaller is better, null is worst)
+            exactMatches.sort((a: any, b: any) => {
+                const rankA = a.market_cap_rank !== null && a.market_cap_rank !== undefined ? a.market_cap_rank : Infinity;
+                const rankB = b.market_cap_rank !== null && b.market_cap_rank !== undefined ? b.market_cap_rank : Infinity;
+                return rankA - rankB;
+            });
+            resolvedId = exactMatches[0].id;
+        } else {
+            resolvedId = coins[0].id || trimmed.toLowerCase();
+        }
+
+        coingeckoIdCache.set(norm, resolvedId);
+        console.log(`ℹ️ [Ingestion] Resolved CoinGecko ID for "${trimmed}" to "${resolvedId}"`);
+        return resolvedId;
+    } catch (error) {
+        console.error(`[Ingestion Error] resolveCoinGeckoId failed for ${symbol}:`, error);
+        return trimmed.toLowerCase();
+    }
+}
+
+export async function fetchCoinGeckoMarkets(coinIdOrSymbol: string, strategy?: DispatcherStrategy) {
     try {
         if (strategy && !strategy.coingecko?.endpoints?.["/coins/markets"]) {
             console.log("⏭️ [Ingestion] Skipping CoinGecko markets fetch (not requested by dispatcher)");
             return { fallback: false, skipped: true };
         }
         
+        const resolvedId = await resolveCoinGeckoId(coinIdOrSymbol);
+        
         const apiKey = process.env.COINGECKO_API_KEY;
         const headers: Record<string, string> = { 'Accept': 'application/json' };
         if (apiKey) headers['x-cg-demo-api-key'] = apiKey;
         
-        const response = await fetch(`https://api.coingecko.com/api/v3/coins/markets?vs_currency=usd&ids=${coinId.toLowerCase()}`, { headers });
+        const response = await fetch(`https://api.coingecko.com/api/v3/coins/markets?vs_currency=usd&ids=${resolvedId.toLowerCase()}`, { headers });
         if (!response.ok) {
             throw new Error(`CoinGecko API markets responded with status ${response.status}`);
         }
@@ -225,17 +294,19 @@ export async function fetchCoinGeckoMarkets(coinId: string, strategy?: Dispatche
         
         return result;
     } catch (error) {
-        console.error(`[Ingestion Error] fetchCoinGeckoMarkets failed for ${coinId}:`, error);
+        console.error(`[Ingestion Error] fetchCoinGeckoMarkets failed for ${coinIdOrSymbol}:`, error);
         return { fallback: true };
     }
 }
 
-export async function fetchCoinGeckoMacro(coinId: string, strategy?: DispatcherStrategy) {
+export async function fetchCoinGeckoMacro(coinIdOrSymbol: string, strategy?: DispatcherStrategy) {
     try {
         if (strategy && !strategy.coingecko?.endpoints?.["/coins/{id}"]) {
             console.log("⏭️ [Ingestion] Skipping CoinGecko /coins/{id} fetch (not requested by dispatcher)");
             return { fallback: false, skipped: true };
         }
+        
+        const resolvedId = await resolveCoinGeckoId(coinIdOrSymbol);
         
         const apiKey = process.env.COINGECKO_API_KEY;
         const headers: Record<string, string> = { 'Accept': 'application/json' };
@@ -245,7 +316,7 @@ export async function fetchCoinGeckoMacro(coinId: string, strategy?: DispatcherS
         const includeCommunity = !requestedFields || requestedFields.includes("community_data");
         const includeDeveloper = !requestedFields || requestedFields.includes("developer_data");
         
-        const response = await fetch(`https://api.coingecko.com/api/v3/coins/${coinId.toLowerCase()}?localization=false&tickers=false&community_data=${includeCommunity}&developer_data=${includeDeveloper}&sparkline=false`, {
+        const response = await fetch(`https://api.coingecko.com/api/v3/coins/${resolvedId.toLowerCase()}?localization=false&tickers=false&community_data=${includeCommunity}&developer_data=${includeDeveloper}&sparkline=false`, {
             headers
         });
         
@@ -270,7 +341,7 @@ export async function fetchCoinGeckoMacro(coinId: string, strategy?: DispatcherS
         
         return result;
     } catch (error) {
-        console.error(`[Ingestion Error] fetchCoinGeckoMacro failed for ${coinId}:`, error);
+        console.error(`[Ingestion Error] fetchCoinGeckoMacro failed for ${coinIdOrSymbol}:`, error);
         return { fallback: true };
     }
 }
