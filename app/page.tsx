@@ -1,4 +1,30 @@
 import Image from "next/image";
+import { EvidenceItem } from "./lib/mcts/pipeline";
+
+export function EvidenceList({ items }: { items: EvidenceItem[] }) {
+  return (
+    <div className="w-full mt-4 p-4 border border-zinc-200 rounded-lg dark:border-zinc-800">
+      <h3 className="text-sm font-semibold mb-2 text-zinc-900 dark:text-zinc-100">Evidence Chain Weights Check:</h3>
+      <ul className="space-y-2">
+        {items.map((item, idx) => (
+          <li key={idx} className="text-xs text-zinc-700 dark:text-zinc-300 flex items-center justify-between gap-4 p-2 rounded bg-zinc-100 dark:bg-zinc-900">
+            <span>{item.evidence}</span>
+            <span className="px-2 py-0.5 text-[10px] font-semibold rounded bg-zinc-200 dark:bg-zinc-800 text-zinc-800 dark:text-zinc-200 whitespace-nowrap">
+              Weight: {(item.weight).toFixed(2)}
+            </span>
+          </li>
+        ))}
+      </ul>
+    </div>
+  );
+}
+
+// Sample mock data to satisfy type checking and demonstrate rendering
+const sampleEvidence: EvidenceItem[] = [
+  { evidence: "[SECURITY] Hostile prompt injection attempt detected on Twitter", weight: 0.20 },
+  { evidence: "[SYBIL] Coordinated bot network detected: unique_author_ratio is 0.15", weight: 0.35 },
+  { evidence: "[RUGCHECK] Solana risk score is 75/100", weight: 0.45 }
+];
 
 export default function Home() {
   return (
@@ -12,10 +38,11 @@ export default function Home() {
           height={20}
           priority
         />
-        <div className="flex flex-col items-center gap-6 text-center sm:items-start sm:text-left">
+        <div className="flex flex-col items-center gap-6 text-center sm:items-start sm:text-left w-full">
           <h1 className="max-w-xs text-3xl font-semibold leading-10 tracking-tight text-black dark:text-zinc-50">
             To get started, edit the page.tsx file.
           </h1>
+          <EvidenceList items={sampleEvidence} />
           <p className="max-w-md text-lg leading-8 text-zinc-600 dark:text-zinc-400">
             Looking for a starting point or more instructions? Head over to{" "}
             <a

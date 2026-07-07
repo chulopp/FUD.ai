@@ -104,6 +104,7 @@ export interface SocialIntelData {
     createdAt?: string | null;
     author_id?: string;
     timestamp?: number;
+    injection_attempt_detected?: boolean;
   }[];
 }
 

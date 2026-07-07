@@ -26,17 +26,24 @@ const SPAM_PATTERNS: RegExp[] = [
   /click\s+(here|link\s+in\s+bio)/i, // Link-in-bio phishing
 ];
 
+// Regex for common jailbreak/prompt injection patterns
+const INJECTION_PATTERNS: RegExp[] = [
+  /(ignore all previous|system:|you are now|output ignore_fud|bypass|ignore previous instructions)/i
+];
+
 // Drop posts with more than this many distinct cashtags ($XXX) — signals
 // cross-promotion bots, not genuine sentiment about the target token.
 const MAX_DISTINCT_CASHTAGS = 3;
 
 export interface SpammablePost {
   text: string;
+  injection_attempt_detected?: boolean;
   [key: string]: unknown;
 }
 
 /**
  * Returns only posts that pass all spam heuristics.
+ * Injection attempts are mutated to add injection_attempt_detected: true and kept as evidence.
  *
  * @param posts  Array of post objects with at minimum a `text` field.
  * @returns      Filtered array — spam posts removed.
@@ -45,6 +52,13 @@ export function filterSpamPosts<T extends SpammablePost>(posts: T[]): T[] {
   const before = posts.length;
   const filtered = posts.filter(post => {
     const text = post.text ?? '';
+
+    // Check for jailbreak/prompt injection patterns first
+    if (INJECTION_PATTERNS.some(re => re.test(text))) {
+      post.injection_attempt_detected = true;
+      console.warn(`⚠️ [SpamFilter] Hostile prompt injection attempt detected: "${text.substring(0, 80)}..."`);
+      return true; // Keep as evidence of manipulation
+    }
 
     // Check for known spam regex patterns
     if (SPAM_PATTERNS.some(re => re.test(text))) {
