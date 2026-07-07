@@ -1,4 +1,5 @@
 import { DispatcherStrategy } from '../mcts/dispatcher';
+import { type IngestionResult, type SocialIntelData, ok, empty, ingestionError, notCalled } from './types';
 
 export interface TweetResult {
   id: string;
@@ -33,7 +34,7 @@ export async function searchTwitterRapidAPI(
   const results: TweetResult[] = [];
   try {
     const url = `https://${apiHost}/search.php?query=${encodeURIComponent(query)}&search_type=Latest`;
-    
+
     console.log(`[RapidAPI Twitter] Fetching tweets for query: "${query}"...`);
     const response = await fetch(url, {
       method: 'GET',
@@ -63,7 +64,7 @@ export async function searchTwitterRapidAPI(
       const likes = typeof item.favorites === 'number' ? item.favorites : undefined;
       const retweets = typeof item.retweets === 'number' ? item.retweets : undefined;
       const replies = typeof item.replies === 'number' ? item.replies : undefined;
-      
+
       let views: number | undefined = undefined;
       if (item.views !== undefined && item.views !== null) {
         const parsedViews = parseInt(String(item.views).replace(/[^0-9]/g, ''), 10);
@@ -102,44 +103,45 @@ export async function searchTwitterRapidAPI(
 }
 
 /**
- * Pipeline-compatible wrapper consumed by the MCTS Dispatcher.
- * Respects the `social_rapidapi_twitter` strategy gate.
+ * Pipeline-compatible wrapper consumed by the MCTS pipeline.
+ * Returns IngestionResult<SocialIntelData> so downstream can distinguish
+ * "fetched but empty" from "was never called" from "errored".
  */
 export async function fetchTwitterIntel(
   coinSymbol: string,
   strategy?: DispatcherStrategy
-): Promise<{ text: string; fallback: boolean; skipped?: boolean }> {
-  try {
-    if (strategy && !strategy.social_rapidapi_twitter) {
-      console.log(
-        '⏭️ [Ingestion] Skipping Twitter fetch (not requested by dispatcher)'
-      );
-      return { text: '[]', fallback: false, skipped: true };
-    }
+): Promise<IngestionResult<SocialIntelData>> {
+  if (strategy && !strategy.social_rapidapi_twitter) {
+    console.log('⏭️ [Ingestion] Skipping Twitter fetch (not requested by dispatcher)');
+    return notCalled<SocialIntelData>();
+  }
 
-    // Default query: cashtag + token name. The cashtag is the strongest sentiment signal.
+  try {
     const cleanSymbol = coinSymbol.replace(/^[$]/, '').toUpperCase();
     const query = `$${cleanSymbol} OR ${cleanSymbol} crypto`;
     const tweets = await searchTwitterRapidAPI(query, 20);
 
-    const payload = tweets.map((t) => ({
-      username: t.username,
-      text: t.text,
-      likes: t.likes,
-      retweets: t.retweets,
-      createdAt: t.createdAt,
-      url: t.url,
-    }));
+    if (tweets.length === 0) {
+      return empty<SocialIntelData>();
+    }
 
-    return {
-      text: JSON.stringify(payload, null, 2),
-      fallback: payload.length === 0,
-    };
+    const posts = tweets.map(t => {
+      const timestamp = t.createdAt ? new Date(t.createdAt).getTime() : Date.now();
+      return {
+        username: t.username,
+        text: t.text,
+        likes: t.likes,
+        retweets: t.retweets,
+        createdAt: t.createdAt,
+        author_id: t.username ? `twitter_${t.username}` : undefined,
+        timestamp,
+      };
+    });
+
+    return ok<SocialIntelData>({ posts });
   } catch (error) {
-    console.error(
-      `[Ingestion Error] fetchTwitterIntel failed for ${coinSymbol}:`,
-      error
-    );
-    return { text: '[]', fallback: true };
+    const msg = error instanceof Error ? error.message : String(error);
+    console.error(`[Ingestion Error] fetchTwitterIntel failed for ${coinSymbol}:`, msg);
+    return ingestionError<SocialIntelData>(msg);
   }
 }

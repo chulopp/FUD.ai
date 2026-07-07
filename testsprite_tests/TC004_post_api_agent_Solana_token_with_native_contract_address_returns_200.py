@@ -1,72 +1,74 @@
 import requests
+import time
 
-def test_post_api_agent_solana_token_native_contract():
-    base_url = "http://localhost:3000"
-    endpoint = "/api/agent"
-    url = base_url + endpoint
-    headers = {
-        "Content-Type": "application/json"
-    }
+BASE_URL = "http://localhost:3000"
+TIMEOUT = 30
+POLL_INTERVAL = 5
+
+def test_post_api_agent_solana_token_native_contract_address():
+    post_url = f"{BASE_URL}/api/agent"
+    headers = {"Content-Type": "application/json"}
     payload = {
         "coin_symbol": "SOL",
         "contract_address": "native"
     }
-    timeout = 120
-
     try:
-        response = requests.post(url, json=payload, headers=headers, timeout=timeout)
+        # Step 1: POST /api/agent with specified payload
+        post_resp = requests.post(post_url, json=payload, headers=headers, timeout=TIMEOUT)
+        assert post_resp.status_code == 202, f"Expected status 202, got {post_resp.status_code}"
+        post_data = post_resp.json()
+
+        # Validate presence of job_id and poll_url
+        job_id = post_data.get("job_id")
+        poll_url = post_data.get("poll_url")
+        assert isinstance(job_id, str) and len(job_id) > 0, "Missing or invalid job_id"
+        assert isinstance(poll_url, str) and poll_url.startswith("/api/agent/"), "Invalid poll_url"
+
+        # Step 2: Poll GET /api/agent/[job_id] until status is 'completed'
+        get_url = f"{BASE_URL}{poll_url}"
+        max_polls = 60  # max 5 minutes
+        for _ in range(max_polls):
+            get_resp = requests.get(get_url, timeout=TIMEOUT)
+            assert get_resp.status_code == 200, f"Expected 200 on GET, got {get_resp.status_code}"
+            get_data = get_resp.json()
+            status = get_data.get("status")
+            if status == "completed":
+                # Validate final response schema fields
+                # required fields: request_id (string), coin_symbol (matches request),
+                # drama_index (0-100 number), dominant_branch (non-empty string),
+                # branch_probabilities (object), evidence_chain (array),
+                # executable_verdict (one of LIQUIDATE_LONGS|HOLD|ACCUMULATE|IGNORE_FUD),
+                # served_from_cache (boolean), fallback (boolean or absent),
+                # pipeline_elapsed_ms (number)
+                request_id = get_data.get("request_id")
+                coin_symbol = get_data.get("coin_symbol")
+                drama_index = get_data.get("drama_index")
+                dominant_branch = get_data.get("dominant_branch")
+                branch_probabilities = get_data.get("branch_probabilities")
+                evidence_chain = get_data.get("evidence_chain")
+                executable_verdict = get_data.get("executable_verdict")
+                served_from_cache = get_data.get("served_from_cache")
+                fallback = get_data.get("fallback", False)
+                pipeline_elapsed_ms = get_data.get("pipeline_elapsed_ms")
+
+                assert isinstance(request_id, str) and len(request_id) > 0, "Missing or invalid request_id"
+                assert coin_symbol == "SOL", f"coin_symbol mismatch: expected 'SOL', got {coin_symbol}"
+                assert isinstance(drama_index, (int, float)) and 0 <= drama_index <= 100, "Invalid drama_index"
+                assert isinstance(dominant_branch, str) and len(dominant_branch) > 0, "Missing dominant_branch"
+                assert isinstance(branch_probabilities, dict) and len(branch_probabilities) > 0, "Invalid branch_probabilities"
+                assert isinstance(evidence_chain, list), "evidence_chain should be a list"
+                valid_verdicts = {"LIQUIDATE_LONGS", "HOLD", "ACCUMULATE", "IGNORE_FUD"}
+                assert executable_verdict in valid_verdicts, f"Invalid executable_verdict: {executable_verdict}"
+                assert isinstance(served_from_cache, bool), "served_from_cache should be boolean"
+                assert isinstance(fallback, bool), "fallback should be boolean"
+                assert isinstance(pipeline_elapsed_ms, (int, float)) and pipeline_elapsed_ms >= 0, "Invalid pipeline_elapsed_ms"
+                return
+            elif status in ("pending", "running"):
+                time.sleep(POLL_INTERVAL)
+            else:
+                assert False, f"Unexpected status: {status}"
+        assert False, "Polling timed out before job completion"
     except requests.RequestException as e:
-        assert False, f"Request failed: {e}"
+        assert False, f"HTTP request failed: {e}"
 
-    assert response.status_code == 200, f"Expected status 200, got {response.status_code}"
-
-    try:
-        data = response.json()
-    except ValueError:
-        assert False, "Response is not valid JSON"
-
-    # Validate required fields presence and types
-    required_fields = {
-        "request_id": str,
-        "coin_symbol": str,
-        "drama_index": (int, float),
-        "dominant_branch": str,
-        "branch_probabilities": dict,
-        "evidence_chain": list,
-        "executable_verdict": str,
-        "served_from_cache": bool
-    }
-    for field, field_type in required_fields.items():
-        assert field in data, f"Missing field in response JSON: {field}"
-        assert isinstance(data[field], field_type), f"Field {field} has incorrect type: expected {field_type}, got {type(data[field])}"
-
-    # Validate coin_symbol matches the request
-    assert data["coin_symbol"].upper() == "SOL", f"coin_symbol mismatch: expected 'SOL', got '{data['coin_symbol']}'"
-
-    # Validate drama_index range 0-100
-    drama_index = data["drama_index"]
-    assert 0 <= drama_index <= 100, f"drama_index out of range 0-100: got {drama_index}"
-
-    # Validate dominant_branch is non-empty string
-    assert len(data["dominant_branch"].strip()) > 0, "dominant_branch is empty"
-
-    # Validate branch_probabilities values are between 0 and 1
-    for branch, prob in data["branch_probabilities"].items():
-        assert isinstance(branch, str), f"Branch name is not string: {branch}"
-        assert isinstance(prob, (int,float)), f"Probability is not numeric for branch {branch}"
-        assert 0 <= prob <= 1, f"Probability for branch {branch} out of 0-1 range: {prob}"
-
-    # Validate evidence_chain is list of strings (can be empty)
-    assert all(isinstance(item, str) for item in data["evidence_chain"]), "evidence_chain must be array of strings"
-
-    # Validate executable_verdict is one of allowed values
-    valid_verdicts = {"LIQUIDATE_LONGS", "HOLD", "ACCUMULATE", "IGNORE_FUD"}
-    assert data["executable_verdict"] in valid_verdicts, f"Invalid executable_verdict: {data['executable_verdict']}"
-
-    # served_from_cache is boolean, no specific value required here
-
-    # fallback is optional - if present, must be boolean
-    if "fallback" in data:
-        assert isinstance(data["fallback"], bool), "fallback field must be boolean if present"
-
-test_post_api_agent_solana_token_native_contract()
+test_post_api_agent_solana_token_native_contract_address()

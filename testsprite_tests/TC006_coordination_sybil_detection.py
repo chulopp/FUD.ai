@@ -7,12 +7,12 @@ TIMEOUT = 30
 POLL_INTERVAL = 5
 MAX_POLL_TIME = 300  # 5 minutes
 
-def test_post_api_agent_valid_request_returns_analysis_verdict():
+def test_coordination_sybil_detection():
     url = f"{BASE_URL}{ENDPOINT}"
     headers = {"Content-Type": "application/json"}
     payload = {
-        "coin_symbol": "DOGE",
-        "contract_address": "0x1234567890abcdef1234567890abcdef12345678",
+        "coin_symbol": "PEPE",
+        "contract_address": "0x6982508145554ce3b5901a7778ad28a500216222",
         "chain_id": "1"
     }
 
@@ -57,28 +57,20 @@ def test_post_api_agent_valid_request_returns_analysis_verdict():
 
     assert final_result is not None, "Final response is None after polling"
 
-    # Step 3: Validate required fields in the response
-    required_fields = [
-        "request_id",
-        "coin_symbol",
-        "drama_index",
-        "dominant_branch",
-        "branch_probabilities",
-        "evidence_chain",
-        "executable_verdict",
-        "served_from_cache"
-    ]
-    for field in required_fields:
-        assert field in final_result, f"Missing '{field}' in response JSON"
+    # Step 3: Validate coordination_signals is present and populated
+    assert "coordination_signals" in final_result, "Missing 'coordination_signals' in response JSON"
+    signals = final_result["coordination_signals"]
+    assert isinstance(signals, dict), "coordination_signals should be an object"
 
-    # Validate data types
-    assert isinstance(final_result["request_id"], str), "request_id should be a string"
-    assert final_result["coin_symbol"] == "DOGE", "coin_symbol in response should match the request"
-    assert isinstance(final_result["drama_index"], (int, float)), "drama_index should be a number"
-    assert isinstance(final_result["dominant_branch"], str), "dominant_branch should be a string"
-    assert isinstance(final_result["branch_probabilities"], dict), "branch_probabilities should be an object"
-    assert isinstance(final_result["evidence_chain"], list), "evidence_chain should be an array"
-    assert isinstance(final_result["executable_verdict"], str), "executable_verdict should be a string"
-    assert isinstance(final_result["served_from_cache"], bool), "served_from_cache should be a boolean"
+    # Validate specific mathematical fields are present and typed correctly
+    assert "unique_author_ratio" in signals, "Missing 'unique_author_ratio' in coordination_signals"
+    assert "duplicate_text_cluster_size" in signals, "Missing 'duplicate_text_cluster_size' in coordination_signals"
+    assert "cross_platform_burst_window_minutes" in signals, "Missing 'cross_platform_burst_window_minutes' in coordination_signals"
 
-test_post_api_agent_valid_request_returns_analysis_verdict()
+    assert isinstance(signals["unique_author_ratio"], (int, float)), "unique_author_ratio should be a number"
+    assert isinstance(signals["duplicate_text_cluster_size"], (int, float)), "duplicate_text_cluster_size should be a number"
+    assert isinstance(signals["cross_platform_burst_window_minutes"], (int, float)), "cross_platform_burst_window_minutes should be a number"
+
+    print("Success: coordination_signals verified successfully!", signals)
+
+test_coordination_sybil_detection()

@@ -19,10 +19,10 @@
       "name": "FUD Analysis Agent API",
       "description": "Primary API entry point for submitting a token for FUD analysis and receiving a structured verdict JSON.",
       "user_flows": [
-        "POST /api/agent with coin_symbol, optional contract_address, and optional chain_id -> Receive 200 with request_id, drama_index, branch_probabilities, evidence_chain, and executable_verdict -> Client uses verdict JSON for downstream trading or monitoring",
+        "POST /api/agent with coin_symbol, optional contract_address, and optional chain_id -> Receive 202 Accepted with job_id and poll_url -> Client polls GET /api/agent/[job_id] every 5 seconds until status is completed -> Client uses verdict JSON for downstream trading or monitoring",
         "POST /api/agent with coin_symbol but missing required coin_symbol field -> Receive 400 with an error message indicating the missing parameter",
-        "POST /api/agent for a token request when external data sources degrade -> Receive 200 with fallback=true and a reduced-quality verdict JSON",
-        "POST /api/agent for a repeated request matching a cached token window -> Receive 200 with served_from_cache=true and the cached verdict payload"
+        "POST /api/agent for a token request when external data sources degrade -> Receive 202 Accepted with job_id and poll_url -> Client polls GET /api/agent/[job_id] until status is completed with fallback=true in payload",
+        "POST /api/agent for a repeated request matching a cached token window -> Receive 202 Accepted with job_id and poll_url -> Client polls GET /api/agent/[job_id] until status is completed with served_from_cache=true in payload"
       ]
     },
     {
@@ -31,7 +31,7 @@
       "user_flows": [
         "POST /api/agent with a Solana-style request and no contract_address -> Dispatcher selects RugCheck-first/native-token handling -> Pipeline proceeds with native-safe defaults and returns a verdict JSON",
         "POST /api/agent with an EVM token contract_address and chain_id -> Dispatcher selects GoPlus and DexScreener priority -> Pipeline ingests security and liquidity data before reasoning",
-        "POST /api/agent with a native token symbol only -> Dispatcher selects Bybit order book and skips DEX/security fetches -> API returns 200 using native-token mode",
+        "POST /api/agent with a native token symbol only -> Dispatcher selects Bybit order book and skips DEX/security fetches -> API returns 202 Accepted, and polling GET /api/agent/[job_id] completes using native-token mode",
         "POST /api/agent with malformed or incomplete token context -> Dispatcher cannot derive a valid ingestion strategy -> API returns 400 or a degraded fallback response depending on validation stage"
       ]
     },
@@ -41,7 +41,7 @@
       "user_flows": [
         "POST /api/agent with a valid token request -> Ingestion layer calls Bybit, DexScreener, GoPlus, RugCheck, CoinGecko, DefiLlama, Twitter, and Telegram sources in parallel -> Aggregated snapshots are forwarded to the reasoning pipeline",
         "POST /api/agent for a native token request -> Ingestion layer skips DEX/security fetches and returns safe defaults -> Pipeline completes with reduced source coverage",
-        "POST /api/agent when one or more external APIs rate limit or timeout -> Ingestion layer degrades gracefully and continues with remaining sources -> API returns 200 with fallback=true",
+        "POST /api/agent when one or more external APIs rate limit or timeout -> Ingestion layer degrades gracefully and continues with remaining sources -> Polling completes with status completed and fallback=true",
         "POST /api/agent when a social source returns no usable content -> Ingestion layer returns empty or partial social payloads -> Reasoning continues using available on-chain data"
       ]
     },
@@ -52,7 +52,7 @@
         "POST /api/agent with ingested Twitter and Telegram text -> Noise filter calls the lightweight engine -> Receive a JSON array of claim strings that can be used by the heavyweight reasoning engine",
         "POST /api/agent with social text that fails JSON parsing in the lightweight step -> Noise filter falls back to an empty claim array -> Pipeline continues without crashing",
         "POST /api/agent with minimal or no social content -> Noise filter returns an empty or near-empty claim list -> Heavyweight reasoning proceeds using on-chain and market data",
-        "POST /api/agent when lightweight engine output is malformed -> safe parsing rejects the payload -> System uses fallback handling and returns a degraded but valid verdict response"
+        "POST /api/agent when lightweight engine output is malformed -> safe parsing rejects the payload -> System uses fallback handling and polling completes with a degraded but valid verdict response"
       ]
     },
     {
@@ -62,7 +62,7 @@
         "POST /api/agent after noise-filtered claims are available -> Heavyweight engine evaluates scenario branches and may request FETCH_MORE once -> Pipeline returns drama_index, dominant_branch, confidence, and executable_verdict",
         "POST /api/agent when the evaluator determines more perp or DEX evidence is needed -> System performs one extra ReAct iteration to fetch additional data -> Final verdict is generated after the extra evidence arrives",
         "POST /api/agent when the heavyweight engine outputs malformed JSON -> safeParseJSON rejects the response -> Pipeline returns the fallback verdict with fallback=true",
-        "POST /api/agent with completed reasoning and valid structured output -> API returns 200 with evidence_chain and branch_probabilities for downstream consumption"
+        "POST /api/agent with completed reasoning and valid structured output -> Polling GET /api/agent/[job_id] completes with status completed, returning evidence_chain and branch_probabilities"
       ]
     },
     {
@@ -107,7 +107,7 @@
     "features": [
       {
         "name": "FUD Analysis Agent API",
-        "description": "Main entry point that accepts a POST request with coin_symbol, contract_address, and chain_id. Runs the full MCTS pipeline (Dispatcher → Ingestion → LLM noise filter → DeepSeek MCTS evaluator with ReAct loop) and returns a structured FUD verdict JSON.\n",
+        "description": "Main entry point that accepts a POST request with coin_symbol, contract_address, and chain_id. Initiates the MCTS pipeline (Dispatcher → Ingestion → LLM noise filter → DeepSeek MCTS evaluator with ReAct loop) in the background, returns 202 Accepted immediately, and writes updates to Redis. Client retrieves the verdict via polling.\n",
         "files": [
           "app/api/agent/route.ts",
           "app/lib/mcts/pipeline.ts",
@@ -117,7 +117,7 @@
           {
             "method": "POST",
             "path": "/api/agent",
-            "description": "Submit a token for FUD analysis. Returns a verdict with drama_index, dominant_branch, branch_probabilities, evidence_chain, executable_verdict, served_from_cache, request_id, coin_symbol.\n",
+            "description": "Submit a token for FUD analysis. Returns 202 Accepted immediately with job_id and poll_url. Client polls GET /api/agent/[job_id] to retrieve the verdict.\n",
             "auth_required": false,
             "request_schema": {
               "body": {
@@ -127,9 +127,50 @@
               }
             },
             "response_schema": {
-              "200": {
-                "request_id": "string (UUID)",
+              "202": {
+                "job_id": "string (UUID)",
+                "status": "pending | running",
                 "coin_symbol": "string",
+                "poll_url": "string (/api/agent/[job_id])",
+                "message": "string"
+              },
+              "400": {
+                "error": "string (missing required parameter message)"
+              },
+              "500": {
+                "error": "string (internal server error message)"
+              }
+            },
+            "depends_on": [
+              "Granular Dispatcher",
+              "Parallel Ingestion Layer",
+              "Lightweight LLM Noise Filter",
+              "DeepSeek MCTS Evaluator"
+            ]
+          },
+          {
+            "method": "GET",
+            "path": "/api/agent/[job_id]",
+            "description": "Poll the status of an analysis job. Returns pending/running status, or the completed verdict or failed error message.\n",
+            "auth_required": false,
+            "request_schema": {
+              "params": {
+                "job_id": "string (required, UUID)"
+              }
+            },
+            "response_schema": {
+              "200 (pending/running)": {
+                "job_id": "string (UUID)",
+                "coin_symbol": "string",
+                "status": "pending | running",
+                "poll_url": "string",
+                "message": "string"
+              },
+              "200 (completed)": {
+                "job_id": "string (UUID)",
+                "coin_symbol": "string",
+                "status": "completed",
+                "request_id": "string (UUID)",
                 "drama_index": "number (0-100)",
                 "dominant_branch": "string",
                 "branch_probabilities": "object (branch -> 0-1 probability)",
@@ -137,16 +178,19 @@
                 "executable_verdict": "LIQUIDATE_LONGS | HOLD | ACCUMULATE | IGNORE_FUD",
                 "confidence": "number (0-1, optional)",
                 "served_from_cache": "boolean",
-                "fallback": "boolean (optional, true if pipeline degraded)"
+                "fallback": "boolean",
+                "pipeline_elapsed_ms": "number"
               },
-              "400": {
-                "error": "string (missing required parameter message)"
+              "200 (failed)": {
+                "job_id": "string (UUID)",
+                "coin_symbol": "string",
+                "status": "failed",
+                "error": "string",
+                "executable_verdict": "INSUFFICIENT_DATA",
+                "confidence": "null"
               },
-              "500": {
-                "drama_index": 0,
-                "executable_verdict": "IGNORE_FUD",
-                "error": "Internal Pipeline Error",
-                "fallback": true
+              "404": {
+                "error": "string (Job not found or expired)"
               }
             },
             "depends_on": [

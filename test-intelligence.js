@@ -103,24 +103,33 @@ global.fetch = async function(input, init) {
       }
     }
 
-    // Intercept Bybit Tickers
-    if (url.includes('api.bybit.com')) {
+    // Intercept Bybit Tickers (api.bytick.com is the Indonesia-accessible production domain)
+    if (url.includes('api.bytick.com') || url.includes('api.bybit.com') || url.includes('api-testnet.bytick.com')) {
       const data = await clone.json();
-      ingestionPayloads.bybit = {
-        symbol: data.result?.list?.[0]?.symbol,
-        lastPrice: data.result?.list?.[0]?.lastPrice
-      };
+      const item = data.result?.list?.[0];
+      if (item) {
+        ingestionPayloads.bybit = {
+          symbol: item.symbol,
+          lastPrice: item.lastPrice,
+          openInterest: item.openInterest,
+          fundingRate: item.fundingRate,
+        };
+      }
     }
 
-    // Intercept DexScreener
+    // Intercept DexScreener — covers both v1 token-pairs and legacy /latest/dex endpoints
     if (url.includes('dexscreener.com')) {
       const data = await clone.json();
-      const pair = data.pairs?.[0] || data.pair;
+      // v1 returns array directly; legacy wraps in {pairs: []}
+      const pairList = Array.isArray(data) ? data : (data.pairs || []);
+      const pair = pairList[0] || data.pair;
       if (pair) {
         ingestionPayloads.dexscreener = {
+          endpoint: url.includes('/token-pairs/v1/') ? 'v1_token_pairs' : 'legacy',
           priceUsd: pair.priceUsd,
           liquidityUsd: pair.liquidity?.usd,
-          volume24h: pair.volume?.h24
+          volume24h: pair.volume?.h24,
+          pairCreatedAt: pair.pairCreatedAt,
         };
       }
     }
@@ -196,10 +205,14 @@ console.log = function(...args) {
       originalLog(`  - [GoPlus EVM]: Honeypot = ${ingestionPayloads.goplus.isHoneypot}, Mintable = ${ingestionPayloads.goplus.isMintable}`);
     }
     if (ingestionPayloads.bybit) {
-      originalLog(`  - [Bybit Spot CEX]: Active symbol = ${ingestionPayloads.bybit.symbol}, Price = ${ingestionPayloads.bybit.lastPrice}`);
+      originalLog(`  - [Bybit (api.bytick.com)]: Symbol = ${ingestionPayloads.bybit.symbol}, Price = ${ingestionPayloads.bybit.lastPrice}, OI = ${ingestionPayloads.bybit.openInterest}`);
+    } else {
+      originalLog(`  - [Bybit]: No data captured (check domain interceptor or symbol not listed)`);
     }
     if (ingestionPayloads.dexscreener) {
-      originalLog(`  - [DexScreener Pools]: Price = $${ingestionPayloads.dexscreener.priceUsd}, Liquidity = $${ingestionPayloads.dexscreener.liquidityUsd}`);
+      originalLog(`  - [DexScreener (${ingestionPayloads.dexscreener.endpoint})]: Price = $${ingestionPayloads.dexscreener.priceUsd}, Liquidity = $${ingestionPayloads.dexscreener.liquidityUsd}, Created = ${ingestionPayloads.dexscreener.pairCreatedAt ? new Date(ingestionPayloads.dexscreener.pairCreatedAt).toISOString().split('T')[0] : 'unknown'}`);
+    } else {
+      originalLog(`  - [DexScreener]: Not called or no pairs returned`);
     }
     if (ingestionPayloads.coingecko) {
       originalLog(`  - [CoinGecko Market]: Price = $${ingestionPayloads.coingecko.price}, Cap = $${ingestionPayloads.coingecko.marketCap}`);
@@ -207,6 +220,20 @@ console.log = function(...args) {
     if (ingestionPayloads.defillama) {
       originalLog(`  - [DefiLlama Protocols]: Loaded protocols.`);
     }
+    return;
+  }
+
+  if (logStr.includes('[Pipeline] Source statuses:')) {
+    try {
+      const statusStr = logStr.split('[Pipeline] Source statuses:')[1].trim();
+      const statuses = JSON.parse(statusStr);
+      originalLog('\n========== [SOURCE STATUS REPORT] ==========');
+      originalLog('Data availability per source:');
+      Object.entries(statuses).forEach(([src, st]) => {
+        const icon = st === 'ok' ? '✅' : st === 'error' ? '❌' : st === 'empty' ? '⚠️' : '⏭️';
+        originalLog(`  ${icon} ${src}: ${st}`);
+      });
+    } catch(e) { originalLog(logStr); }
     return;
   }
 
@@ -303,13 +330,42 @@ async function runTestCases() {
 
     try {
       const verdict = await executeFudAnalysis(tc.symbol, tc.address, tc.chainId);
-      if (verdict && verdict.branch_probabilities) {
+
+      // ── Pipeline status check ───────────────────────────────
+      if (verdict.status === 'degraded') {
+        originalLog('\n🚨 ========== [DEGRADED PIPELINE STATUS] ==========');
+        originalLog(`Pipeline status: DEGRADED — ${verdict.reason || 'unknown reason'}`);
+        originalLog(`Executable verdict: ${verdict.executable_verdict}`);
+        originalLog(`Confidence: ${verdict.confidence} (null = unusable)`);
+        originalLog('This is NOT a valid analysis result — bot clients should NOT act on this.');
+      }
+
+      // ── MCTS branches ──────────────────────────────────────
+      if (verdict.branch_probabilities && Object.keys(verdict.branch_probabilities).length > 0) {
         originalLog('\n========== [MCTS EXPLORATION BRANCHES] ==========');
         originalLog('Branches evaluated with probabilities:');
         Object.entries(verdict.branch_probabilities).forEach(([branch, prob]) => {
           originalLog(`  - ${branch}: ${(prob * 100).toFixed(1)}%`);
         });
       }
+
+      // ── Step summary (multi-step proof) ─────────────────────
+      if (verdict.step_summary) {
+        originalLog('\n========== [MULTI-STEP REASONING LOG] ==========');
+        originalLog(`Total LLM calls: ${verdict.step_summary.total_steps} (min 5 required for valid analysis)`);
+        originalLog(`Total tokens: ${verdict.step_summary.total_input_tokens}in / ${verdict.step_summary.total_output_tokens}out`);
+        originalLog(`Estimated cost: $${verdict.step_summary.estimated_cost_usd}`);
+        verdict.step_summary.steps.forEach((s, i) => {
+          originalLog(`  Step ${i+1}: [${s.step_name}] ${s.input_tokens}in/${s.output_tokens}out — ${s.execution_time_ms}ms`);
+        });
+      }
+
+      // ── drama_index breakdown ───────────────────────────────
+      originalLog(`\n========== [DRAMA INDEX BREAKDOWN] ==========`);
+      originalLog(`  chatter_level (social noise):  ${verdict.chatter_level}/100`);
+      originalLog(`  risk_score (on-chain threat):   ${verdict.risk_score}/100`);
+      originalLog(`  drama_index (0.4*c + 0.6*r):   ${verdict.drama_index}/100`);
+
       originalLog('\nResult Payload:\n', JSON.stringify(verdict, null, 2));
     } catch (e) {
       console.error(`❌ Scenario ${tc.id} failed with error:`, e);

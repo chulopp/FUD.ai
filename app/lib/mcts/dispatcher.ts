@@ -184,7 +184,9 @@ Chain ID: ${clientRequest.chainId || '1'}`;
   // Fallback: DeepSeek v4 Flash via DeepSeek API
   try {
     console.log("🤖 [Dispatcher] Querying DeepSeek v4 Flash as fallback LLM...");
-    const raw = await runHeavyweightEngine(DISPATCHER_SYSTEM_PROMPT, userPrompt);
+    const result = await runHeavyweightEngine(DISPATCHER_SYSTEM_PROMPT, userPrompt);
+    // Extract content string from HeavyweightResult
+    const raw = result.content;
     // Strip markdown formatting if any
     const cleaned = raw.trim().replace(/^```(?:json)?\s*/i, '').replace(/\s*```\s*$/, '');
     const parsed = JSON.parse(cleaned);

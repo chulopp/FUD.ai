@@ -1,6 +1,7 @@
 import axios from 'axios';
 import * as cheerio from 'cheerio';
 import { DispatcherStrategy } from '../mcts/dispatcher';
+import { type IngestionResult, type SocialIntelData, ok, empty, ingestionError, notCalled } from './types';
 
 // ─────────────────────────────────────────────────────────────
 // Native Telegram Web Scraper
@@ -94,7 +95,7 @@ export async function scrapeTelegramChannel(
       const media: string[] = [];
       $msg.find('.tgme_widget_message_photo_wrap, .tgme_widget_message_video').each((_j, m) => {
         const bg = $(m).css('background-image') || '';
-        const urlMatch = bg.match(/url\(['"]?(.*?)['"]?\)/);
+        const urlMatch = bg.match(/url\(['"']?(.*?)['"']?\)/);
         if (urlMatch) media.push(urlMatch[1]);
         const vid = $(m).attr('src');
         if (vid) media.push(vid);
@@ -122,26 +123,20 @@ export async function scrapeTelegramChannel(
 
 /**
  * Scan the default intel channel list for messages mentioning the target coin.
- * Optionally also scrape a specific dynamic channel (Option B — e.g. the official
- * project channel passed back from CoinGecko's `links.telegram_channel_identifier`).
- *
- * @param coinSymbol    Symbol to filter for (e.g. "BONK", "BTC").
- * @param strategy      Dispatcher strategy (respects `social_telegram.skipped`).
- * @param dynamicChannel Optional project-specific channel to scan on top of the default list.
+ * Returns IngestionResult<SocialIntelData> so callers can distinguish
+ * "fetched but nothing relevant" (empty) vs "never called" (not_called).
  */
 export async function fetchTelegramIntel(
   coinSymbol: string,
   strategy?: DispatcherStrategy,
   dynamicChannel?: string
-): Promise<{ text: string; fallback: boolean; skipped?: boolean }> {
-  try {
-    if (strategy && !strategy.social_telegram) {
-      console.log(
-        '⏭️ [Ingestion] Skipping Telegram scrape (not requested by dispatcher)'
-      );
-      return { text: '[]', fallback: false, skipped: true };
-    }
+): Promise<IngestionResult<SocialIntelData>> {
+  if (strategy && !strategy.social_telegram) {
+    console.log('⏭️ [Ingestion] Skipping Telegram scrape (not requested by dispatcher)');
+    return notCalled<SocialIntelData>();
+  }
 
+  try {
     const channels = [...DEFAULT_TELEGRAM_CHANNELS];
     if (dynamicChannel && !channels.includes(dynamicChannel)) {
       channels.push(dynamicChannel);
@@ -149,11 +144,11 @@ export async function fetchTelegramIntel(
 
     // Scrape all channels concurrently — a single failure does not break the rest.
     const settled = await Promise.allSettled(
-      channels.map((c) => scrapeTelegramChannel(c, 10))
+      channels.map(c => scrapeTelegramChannel(c, 10))
     );
 
     const allMessages: TelegramMessage[] = [];
-    settled.forEach((s) => {
+    settled.forEach(s => {
       if (s.status === 'fulfilled') allMessages.push(...s.value);
     });
 
@@ -161,28 +156,32 @@ export async function fetchTelegramIntel(
     // to avoid false positives like "BONK" matching "BONKER").
     const symbolUpper = coinSymbol.toUpperCase();
     const coinRe = new RegExp(`\\$?${symbolUpper}\\b`, 'i');
-    const filtered = allMessages.filter((m) => coinRe.test(m.text));
+    const filtered = allMessages.filter(m => coinRe.test(m.text));
 
     // Even if no coin-specific matches, return a small sample of recent headlines
     // so the Lightweight Engine can detect ambient FUD sentiment.
-    const payload = (filtered.length > 0 ? filtered : allMessages.slice(0, 10)).map(
-      (m) => ({
-        channel: m.channel,
-        datetime: m.datetime,
-        views: m.views,
-        text: m.text,
-      })
-    );
+    const selected = filtered.length > 0 ? filtered : allMessages.slice(0, 10);
 
-    return {
-      text: JSON.stringify(payload, null, 2),
-      fallback: payload.length === 0,
-    };
+    if (selected.length === 0) {
+      return empty<SocialIntelData>();
+    }
+
+    const posts = selected.map(m => {
+      const timestamp = m.datetime ? new Date(m.datetime).getTime() : Date.now();
+      return {
+        channel: m.channel,
+        text: m.text,
+        views: m.views,
+        createdAt: m.datetime,
+        author_id: m.channel ? `telegram_${m.channel}` : undefined,
+        timestamp,
+      };
+    });
+
+    return ok<SocialIntelData>({ posts });
   } catch (error) {
-    console.error(
-      `[Ingestion Error] fetchTelegramIntel failed for ${coinSymbol}:`,
-      error
-    );
-    return { text: '[]', fallback: true };
+    const msg = error instanceof Error ? error.message : String(error);
+    console.error(`[Ingestion Error] fetchTelegramIntel failed for ${coinSymbol}:`, msg);
+    return ingestionError<SocialIntelData>(msg);
   }
 }

@@ -10,6 +10,7 @@
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.29.0",
+    "@upstash/redis": "^1.38.0",
     "agent-twitter-client": "^0.0.18",
     "axios": "^1.18.1",
     "cheerio": "^1.2.0",

@@ -2,7 +2,7 @@
   {
     "id": "TC001",
     "title": "post api agent valid EVM token returns structured verdict",
-    "description": "Test POST /api/agent with a valid EVM coin_symbol (DOGE), a well-formed EVM contract_address, and chain_id=1. Verify response status 200 and JSON body includes all required fields: request_id (string), coin_symbol (matches request), drama_index (number 0-100), dominant_branch (non-empty string), branch_probabilities (object), evidence_chain (array), executable_verdict (one of LIQUIDATE_LONGS|HOLD|ACCUMULATE|IGNORE_FUD), served_from_cache (boolean false). Confirm fallback is absent or false."
+    "description": "Test POST /api/agent with a valid EVM coin_symbol (DOGE), a well-formed EVM contract_address, and chain_id=1. Verify response status 202 Accepted with a job_id and poll_url. Poll GET /api/agent/[job_id] every 5 seconds until status is completed. Verify final completed JSON body includes all required fields: request_id (string), coin_symbol (matches request), drama_index (number 0-100), dominant_branch (non-empty string), branch_probabilities (object), evidence_chain (array), executable_verdict (one of LIQUIDATE_LONGS|HOLD|ACCUMULATE|IGNORE_FUD), served_from_cache (boolean false). Confirm fallback is absent or false."
   },
   {
     "id": "TC002",
@@ -12,16 +12,16 @@
   {
     "id": "TC003",
     "title": "post api agent native token without contract address returns 200",
-    "description": "Test POST /api/agent with coin_symbol=BTC and no contract_address field. Verify response status is 200. Since BTC is a native token, DEX and security data should be skipped (fallback defaults). Verify the response JSON still includes all required schema fields: request_id, coin_symbol, drama_index, dominant_branch, branch_probabilities, evidence_chain, executable_verdict, served_from_cache."
+    "description": "Test POST /api/agent with coin_symbol=BTC and no contract_address field. Verify response status is 202 Accepted with a job_id and poll_url. Poll GET /api/agent/[job_id] every 5 seconds until status is completed. Since BTC is a native token, DEX and security data should be skipped. Verify the completed response JSON still includes all required schema fields: request_id, coin_symbol, drama_index, dominant_branch, branch_probabilities, evidence_chain, executable_verdict, served_from_cache."
   },
   {
     "id": "TC004",
     "title": "post api agent Solana token with native contract address returns 200",
-    "description": "Test POST /api/agent with coin_symbol=SOL and contract_address=native. Verify response status is 200 and the pipeline gracefully handles the native token path. All required fields must be present in the response JSON."
+    "description": "Test POST /api/agent with coin_symbol=SOL and contract_address=native. Verify response status is 202 Accepted with a job_id and poll_url. Poll GET /api/agent/[job_id] every 5 seconds until status is completed. Verify the pipeline gracefully handles the native token path and all required fields are present in the final completed response JSON."
   },
   {
     "id": "TC005",
     "title": "post api agent unknown fake coin returns 200 with fallback indicators",
-    "description": "Test POST /api/agent with coin_symbol=FAKECOIN999 and a random fake contract_address. Verify response status is 200 (not 500). The pipeline should degrade gracefully with fallback=true or still return a valid MCTS verdict. All schema fields must be present. executable_verdict must be one of the four valid values."
+    "description": "Test POST /api/agent with coin_symbol=FAKECOIN999 and a random fake contract_address. Verify response status is 202 Accepted with a job_id and poll_url. Poll GET /api/agent/[job_id] every 5 seconds until status is completed. Verify final status is completed with fallback=true or still returns a valid MCTS verdict. All schema fields must be present."
   }
 ]
