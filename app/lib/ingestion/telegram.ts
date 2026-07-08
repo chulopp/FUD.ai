@@ -142,15 +142,20 @@ export async function fetchTelegramIntel(
       channels.push(dynamicChannel);
     }
 
-    // Scrape all channels concurrently — a single failure does not break the rest.
-    const settled = await Promise.allSettled(
-      channels.map(c => scrapeTelegramChannel(c, 10))
-    );
-
     const allMessages: TelegramMessage[] = [];
-    settled.forEach(s => {
-      if (s.status === 'fulfilled') allMessages.push(...s.value);
-    });
+    const CONCURRENCY_LIMIT = 5;
+
+    // Scrape channels in chunks of CONCURRENCY_LIMIT to avoid rate limits / socket exhaustion (HIGH-03)
+    for (let i = 0; i < channels.length; i += CONCURRENCY_LIMIT) {
+      const chunk = channels.slice(i, i + CONCURRENCY_LIMIT);
+      const settled = await Promise.allSettled(
+        chunk.map(c => scrapeTelegramChannel(c, 10))
+      );
+      settled.forEach(s => {
+        if (s.status === 'fulfilled') allMessages.push(...s.value);
+      });
+    }
+
 
     // Filter for messages mentioning the coin symbol (case-insensitive whole-symbol match
     // to avoid false positives like "BONK" matching "BONKER").

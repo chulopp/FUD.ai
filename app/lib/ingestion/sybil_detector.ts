@@ -1,3 +1,14 @@
+/**
+ * sybil_detector.ts — Coordination & Sybil detection metrics from social posts.
+ *
+ * CRITICAL-05 fix: duplicated Jaccard/BFS code removed. All clustering logic
+ * now lives in text_similarity.ts (shared with causality.ts), eliminating the
+ * double-computation that was running O(n²) Jaccard twice per request.
+ * A 100-post cap is enforced inside findLargestCluster().
+ */
+
+import { findLargestCluster, calculateBurstWindowMinutes } from './text_similarity';
+
 export interface SocialPost {
   username?: string;
   channel?: string;
@@ -17,41 +28,6 @@ export interface CoordinationSignals {
 }
 
 /**
- * Extracts character 3-grams from text for Jaccard similarity comparison.
- */
-function get3Grams(text: string): Set<string> {
-  const grams = new Set<string>();
-  // Normalize whitespace and convert to lowercase
-  const cleanText = text.toLowerCase().replace(/\s+/g, ' ').trim();
-  if (cleanText.length < 3) {
-    if (cleanText.length > 0) {
-      grams.add(cleanText);
-    }
-    return grams;
-  }
-  for (let i = 0; i < cleanText.length - 2; i++) {
-    grams.add(cleanText.substring(i, i + 3));
-  }
-  return grams;
-}
-
-/**
- * Calculates Jaccard similarity between two sets.
- */
-function calculateJaccard(setA: Set<string>, setB: Set<string>): number {
-  if (setA.size === 0 && setB.size === 0) return 0;
-  let intersectionSize = 0;
-  for (const elem of setA) {
-    if (setB.has(elem)) {
-      intersectionSize++;
-    }
-  }
-  const unionSize = setA.size + setB.size - intersectionSize;
-  if (unionSize === 0) return 0;
-  return intersectionSize / unionSize;
-}
-
-/**
  * Computes coordination and Sybil detection metrics from raw social posts.
  * Pure heuristics based on unique authors, duplication Jaccard clustering, and time bursts.
  */
@@ -65,81 +41,28 @@ export function computeCoordinationSignals(posts: SocialPost[]): CoordinationSig
   }
 
   // 1. Unique author ratio
-  // Extract all author_ids (fallback to channel or username or random string if missing)
+  // Extract all author_ids (fallback to channel or username or positional sentinel if missing)
   const authors = posts.map((p, idx) => p.author_id || p.username || p.channel || `unknown_${idx}`);
   const uniqueAuthors = new Set(authors);
-  const unique_author_ratio = uniqueAuthors.size / posts.length;
+  // Defensive guard: posts.length is guaranteed > 0 here (checked above)
+  const unique_author_ratio = uniqueAuthors.size / (posts.length || 1);
 
-  // 2. Pre-extract 3-grams for all posts
-  const postGrams = posts.map(p => get3Grams(p.text));
+  // 2. Find largest near-duplicate cluster using shared module (100-post cap enforced inside)
+  const { indices: largestComponent, clusterSize } = findLargestCluster(posts);
 
-  // 3. Build adjacency list of similar posts (>70% Jaccard similarity)
-  const n = posts.length;
-  const adj: number[][] = Array.from({ length: n }, () => []);
-
-  for (let i = 0; i < n; i++) {
-    for (let j = i + 1; j < n; j++) {
-      const sim = calculateJaccard(postGrams[i], postGrams[j]);
-      if (sim > 0.70) {
-        adj[i].push(j);
-        adj[j].push(i);
-      }
-    }
-  }
-
-  // 4. Find all connected components (clusters)
-  const visited = new Uint8Array(n);
-  const components: number[][] = [];
-
-  for (let i = 0; i < n; i++) {
-    if (visited[i] === 0) {
-      const comp: number[] = [];
-      const queue: number[] = [i];
-      visited[i] = 1;
-
-      while (queue.length > 0) {
-        const curr = queue.shift()!;
-        comp.push(curr);
-
-        for (const neighbor of adj[curr]) {
-          if (visited[neighbor] === 0) {
-            visited[neighbor] = 1;
-            queue.push(neighbor);
-          }
-        }
-      }
-      components.push(comp);
-    }
-  }
-
-  // 5. Identify largest cluster (connected component)
-  let largestComponent: number[] = [];
-  let maxClusterSize = 0;
-
-  for (const comp of components) {
-    if (comp.length > maxClusterSize) {
-      maxClusterSize = comp.length;
-      largestComponent = comp;
-    }
-  }
-
-  // 6. Calculate cross platform burst window for the largest cluster (in minutes)
+  // 3. Calculate cross-platform burst window for the largest cluster (in minutes)
   let cross_platform_burst_window_minutes = 0;
   if (largestComponent.length > 1) {
     const timestamps = largestComponent
       .map(idx => posts[idx].timestamp)
       .filter((t): t is number => typeof t === 'number' && !isNaN(t));
 
-    if (timestamps.length > 1) {
-      const minTs = Math.min(...timestamps);
-      const maxTs = Math.max(...timestamps);
-      cross_platform_burst_window_minutes = (maxTs - minTs) / 60000;
-    }
+    cross_platform_burst_window_minutes = calculateBurstWindowMinutes(timestamps);
   }
 
   return {
     unique_author_ratio,
-    duplicate_text_cluster_size: maxClusterSize,
+    duplicate_text_cluster_size: clusterSize,
     cross_platform_burst_window_minutes,
   };
 }

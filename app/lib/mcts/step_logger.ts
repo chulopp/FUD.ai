@@ -28,11 +28,25 @@ export interface StepSummary {
   steps: StepLog[];
 }
 
-// DeepSeek deepseek-chat pricing (USD per 1M tokens)
-const DEEPSEEK_PRICING = {
-  cache_hit_per_1m: 0.0028,
-  cache_miss_per_1m: 0.14,
-  completion_per_1m: 0.28,
+// MODEL pricing per 1M tokens (USD)
+const MODEL_PRICING: Record<string, { cache_hit?: number; input_per_1m: number; completion_per_1m: number }> = {
+  'deepseek-chat': {
+    cache_hit: 0.0028,
+    input_per_1m: 0.14,
+    completion_per_1m: 0.28,
+  },
+  'gemini-2.5-flash': {
+    input_per_1m: 0.075,
+    completion_per_1m: 0.30,
+  },
+  'nvidia/nemotron-3-nano-omni-30b-a3b-reasoning:free': {
+    input_per_1m: 0.00,
+    completion_per_1m: 0.00,
+  },
+  'default': {
+    input_per_1m: 0.10,
+    completion_per_1m: 0.30,
+  },
 };
 
 export class PipelineStepLogger {
@@ -41,26 +55,36 @@ export class PipelineStepLogger {
   log(step: StepLog): void {
     this.steps.push(step);
     console.log(
-      `📊 [StepLogger] "${step.step_name}" — ` +
+      `📊 [StepLogger] "${step.step_name}" (${step.model}) — ` +
       `${step.input_tokens}in/${step.output_tokens}out tokens, ` +
       `${step.execution_time_ms}ms`
     );
   }
 
   getSummary(): StepSummary {
-    const totalInput = this.steps.reduce((s, l) => s + l.input_tokens, 0);
-    const totalOutput = this.steps.reduce((s, l) => s + l.output_tokens, 0);
-    const totalCached = this.steps.reduce((s, l) => s + (l.cached_tokens ?? 0), 0);
-    const cacheMiss = Math.max(0, totalInput - totalCached);
-    const estimatedCost =
-      (totalCached * DEEPSEEK_PRICING.cache_hit_per_1m +
-       cacheMiss * DEEPSEEK_PRICING.cache_miss_per_1m +
-       totalOutput * DEEPSEEK_PRICING.completion_per_1m) / 1_000_000;
+    let estimatedCost = 0;
+
+    for (const step of this.steps) {
+      const modelKey = step.model.toLowerCase();
+      const pricing = MODEL_PRICING[modelKey] || MODEL_PRICING['default'];
+
+      const input = step.input_tokens;
+      const output = step.output_tokens;
+      const cached = step.cached_tokens ?? 0;
+      const cacheHitPrice = pricing.cache_hit ?? pricing.input_per_1m;
+      const cacheMiss = Math.max(0, input - cached);
+
+      const stepCost =
+        (cached * cacheHitPrice +
+         cacheMiss * pricing.input_per_1m +
+         output * pricing.completion_per_1m) / 1_000_000;
+      estimatedCost += stepCost;
+    }
 
     return {
       total_steps: this.steps.length,
-      total_input_tokens: totalInput,
-      total_output_tokens: totalOutput,
+      total_input_tokens: this.steps.reduce((s, l) => s + l.input_tokens, 0),
+      total_output_tokens: this.steps.reduce((s, l) => s + l.output_tokens, 0),
       total_time_ms: this.steps.reduce((s, l) => s + l.execution_time_ms, 0),
       estimated_cost_usd: parseFloat(estimatedCost.toFixed(6)),
       steps: [...this.steps],

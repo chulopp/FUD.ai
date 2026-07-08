@@ -1,7 +1,12 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { executeFudAnalysis } from '../../lib/mcts/pipeline';
 import { createJob, updateJob } from '../../lib/redis/job-store';
+import { redis } from '../../lib/redis/client';
 import crypto from 'crypto';
+
+// Concurrency limiter configuration
+const MAX_CONCURRENT_PIPELINES = 5;
+const ACTIVE_COUNT_KEY = 'pipeline:active_count';
 
 // ─────────────────────────────────────────────────────────────
 // POST /api/agent
@@ -9,16 +14,18 @@ import crypto from 'crypto';
 // Async Polling Pattern (Option A — waitUntil)
 //
 // 1. Validates input.
-// 2. Generates a unique job_id.
-// 3. Writes { status: 'pending' } to Redis.
-// 4. Returns HTTP 202 Accepted immediately with job_id + poll_url.
-// 5. Uses waitUntil() to keep the function alive while the MCTS
+// 2. Checks active pipeline concurrency counter.
+// 3. Generates a unique job_id.
+// 4. Writes { status: 'pending' } to Redis.
+// 5. Returns HTTP 202 Accepted immediately with job_id + poll_url.
+// 6. Uses waitUntil() to keep the function alive while the MCTS
 //    pipeline runs in the background, updating Redis when done.
 //
 // Poll the result via:  GET /api/agent/<job_id>
 // ─────────────────────────────────────────────────────────────
 
 export async function POST(req: NextRequest) {
+  let incremented = false;
   try {
     const body = await req.json().catch(() => ({}));
     const { coin_symbol, contract_address, chain_id, request_id } = body;
@@ -29,6 +36,26 @@ export async function POST(req: NextRequest) {
         { error: 'Missing required parameter: coin_symbol is required.' },
         { status: 400 }
       );
+    }
+
+    // Concurrency Limiter: check active pipelines (MEDIUM-10)
+    try {
+      const activeCount = await redis.incr(ACTIVE_COUNT_KEY);
+      incremented = true;
+      // Auto-expire in 2 minutes so stale counts (e.g. from crashed servers) clean up
+      await redis.expire(ACTIVE_COUNT_KEY, 120);
+
+      if (activeCount > MAX_CONCURRENT_PIPELINES) {
+        await redis.decr(ACTIVE_COUNT_KEY);
+        incremented = false;
+        return NextResponse.json(
+          { error: 'Too many concurrent analyses in progress. Please retry in a moment.' },
+          { status: 429 }
+        );
+      }
+    } catch (err) {
+      // Redis issues shouldn't block client requests entirely, but warn.
+      console.warn('[API Route] Concurrency limiter check failed (non-blocking):', err);
     }
 
     // Generate unique job ID
@@ -88,6 +115,12 @@ export async function POST(req: NextRequest) {
           status: 'failed',
           error: error?.message || 'Unknown pipeline error',
         });
+      } finally {
+        if (incremented) {
+          await redis.decr(ACTIVE_COUNT_KEY).catch(err => {
+            console.warn('[API Route] Failed to decrement active count:', err);
+          });
+        }
       }
     })();
 
@@ -95,7 +128,14 @@ export async function POST(req: NextRequest) {
     if (typeof (req as any).waitUntil === 'function') {
       (req as any).waitUntil(backgroundPipeline);
     } else {
-      // Local Node.js dev fallback: attach to the Promise to prevent unhandled rejection
+      // ⚠️ LOCAL DEV LIMITATION (MEDIUM-09):
+      // On plain Node.js dev server (npm run dev), the background pipeline runs as a
+      // detached Promise that continues after the 202 response is sent. Job state IS
+      // persisted in Redis (Upstash REST), so polling will eventually see 'completed'.
+      // However, if the dev process exits before the pipeline finishes, the job record
+      // in Redis will remain as 'running' permanently (no cleanup). This is intentional
+      // and acceptable for local development. On Vercel, waitUntil() ensures correct
+      // lifecycle management.
       backgroundPipeline.catch(console.error);
     }
 
@@ -113,6 +153,10 @@ export async function POST(req: NextRequest) {
 
   } catch (error) {
     console.error('[API Route] Fatal error in POST /api/agent:', error);
+    // Cleanup if incremented
+    if (incremented) {
+      await redis.decr(ACTIVE_COUNT_KEY).catch(() => {});
+    }
     return NextResponse.json(
       { error: 'Internal server error', status: 'degraded' },
       { status: 500 }

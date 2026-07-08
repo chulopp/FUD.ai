@@ -1,5 +1,7 @@
 import crypto from 'crypto';
 import { DispatcherStrategy } from '../mcts/dispatcher';
+import { fetchWithTimeout } from '../utils/fetch-with-timeout';
+import { redis } from '../redis/client';
 import {
   type IngestionResult,
   type BybitOrderBookData,
@@ -25,6 +27,14 @@ import {
 // ─────────────────────────────────────────────────────────────
 const BYBIT_BASE_URL = process.env.BYBIT_BASE_URL || 'https://api.bytick.com';
 
+/**
+ * Generates HMAC signature headers for the Bybit API.
+ * 
+ * SECURITY AUDIT NOTE (MEDIUM-02): Bybit authentication keys and secrets
+ * are sent EXCLUSIVELY via headers. They are NEVER appended to query params
+ * or URL paths, avoiding leakages in CDN, server-side, or proxy request logs.
+ * Do not log headers in production observability.
+ */
 function generateBybitHeaders(
   apiKey: string | undefined,
   apiSecret: string | undefined,
@@ -64,7 +74,7 @@ export async function fetchBybitOrderBook(
     const headers = generateBybitHeaders(apiKey, apiSecret, qs);
 
     try {
-        const response = await fetch(`${BYBIT_BASE_URL}/v5/market/orderbook?${qs}`, { headers });
+        const response = await fetchWithTimeout(`${BYBIT_BASE_URL}/v5/market/orderbook?${qs}`, { headers }, 10_000);
 
         if (!response.ok) {
             return ingestionError<BybitOrderBookData>(`Bybit API responded with status ${response.status}`);
@@ -111,7 +121,7 @@ export async function fetchBybitPerpetuals(
     const headers = generateBybitHeaders(apiKey, apiSecret, qs);
 
     try {
-        const response = await fetch(`${BYBIT_BASE_URL}/v5/market/tickers?${qs}`, { headers });
+        const response = await fetchWithTimeout(`${BYBIT_BASE_URL}/v5/market/tickers?${qs}`, { headers }, 10_000);
 
         if (!response.ok) {
             return ingestionError<BybitTickerData>(`Bybit API responded with status ${response.status}`);
@@ -191,6 +201,20 @@ export async function fetchDexScreenerData(
 ): Promise<IngestionResult<DexScreenerData>> {
     // Not gated by dispatcher strategy — always called for valid addresses
     try {
+        const addrLower = contractAddress.toLowerCase();
+        const missKey = `ingestion:dexscreener_miss:${addrLower}:${chainId || 'any'}`;
+
+        // Check negative cache first (HIGH-02)
+        try {
+            const hasMiss = await redis.get<string>(missKey);
+            if (hasMiss) {
+                console.log(`⏭️ [DexScreener] Negative cache hit for ${contractAddress} (miss cached) — returning empty.`);
+                return empty<DexScreenerData>();
+            }
+        } catch (err) {
+            console.warn('[DexScreener] Failed to read negative cache:', err);
+        }
+
         const chainSlug = resolveChainSlug(chainId);
         let pairs: any[] | null = null;
 
@@ -199,7 +223,7 @@ export async function fetchDexScreenerData(
             try {
                 const v1Url = `https://api.dexscreener.com/token-pairs/v1/${chainSlug}/${contractAddress}`;
                 console.log(`🔎 [DexScreener] Trying v1 endpoint: ${v1Url}`);
-                const v1Res = await fetch(v1Url);
+                const v1Res = await fetchWithTimeout(v1Url, undefined, 10_000);
                 if (v1Res.ok) {
                     const v1Data = await v1Res.json();
                     // v1 returns an array directly
@@ -215,7 +239,7 @@ export async function fetchDexScreenerData(
 
         // Attempt 2: Legacy tokens endpoint
         if (!pairs || pairs.length === 0) {
-            const legacyRes = await fetch(`https://api.dexscreener.com/latest/dex/tokens/${contractAddress}`);
+            const legacyRes = await fetchWithTimeout(`https://api.dexscreener.com/latest/dex/tokens/${contractAddress}`, undefined, 10_000);
             if (legacyRes.ok) {
                 const legacyData = await legacyRes.json();
                 if (legacyData?.pairs?.length > 0) {
@@ -227,7 +251,7 @@ export async function fetchDexScreenerData(
         // Attempt 3: Search fallback
         if (!pairs || pairs.length === 0) {
             console.log(`⚠️ [DexScreener] No pairs found via primary endpoints, trying search...`);
-            const searchRes = await fetch(`https://api.dexscreener.com/latest/dex/search?q=${encodeURIComponent(contractAddress)}`);
+            const searchRes = await fetchWithTimeout(`https://api.dexscreener.com/latest/dex/search?q=${encodeURIComponent(contractAddress)}`, undefined, 10_000);
             if (searchRes.ok) {
                 const searchData = await searchRes.json();
                 if (searchData?.pairs?.length > 0) {
@@ -237,6 +261,13 @@ export async function fetchDexScreenerData(
         }
 
         if (!pairs || pairs.length === 0) {
+            // Write negative cache to Redis for 60 seconds (HIGH-02)
+            try {
+                await redis.set(missKey, "empty", { ex: 60 });
+                console.log(`[DexScreener] Cached miss for ${contractAddress} in Redis for 60s`);
+            } catch (err) {
+                console.warn('[DexScreener] Failed to write negative cache:', err);
+            }
             return empty<DexScreenerData>();
         }
 
@@ -277,17 +308,23 @@ export async function fetchDefiLlamaProtocols(
     }
 
     try {
-        const response = await fetch('https://api.llama.fi/protocols');
+        // CRITICAL-02 fix: use /protocol/{slug} (single-protocol endpoint, ~1-5KB)
+        // instead of /protocols (full dump, ~2-5MB per request).
+        // Slug is derived as coinSymbol.toLowerCase(); a 404 means the protocol
+        // is not indexed by that slug — return empty (same as a .find() miss).
+        const slug = coinSymbol.toLowerCase();
+        const response = await fetchWithTimeout(`https://api.llama.fi/protocol/${slug}`, undefined, 10_000);
+
+        if (response.status === 404) {
+            console.log(`ℹ️ [DefiLlama] Protocol slug "${slug}" not found (404) — returning empty.`);
+            return empty<DefiLlamaData>();
+        }
         if (!response.ok) {
             return ingestionError<DefiLlamaData>(`DefiLlama API responded with status ${response.status}`);
         }
-        const protocols = await response.json();
-        const symbolUpper = coinSymbol.toUpperCase();
-        const protocol = protocols.find(
-            (p: any) => p.symbol?.toUpperCase() === symbolUpper || p.name?.toUpperCase() === symbolUpper
-        );
 
-        if (!protocol) {
+        const protocol = await response.json();
+        if (!protocol || typeof protocol !== 'object') {
             return empty<DefiLlamaData>();
         }
 
@@ -319,12 +356,25 @@ async function resolveCoinGeckoId(symbol: string): Promise<string> {
         return coingeckoIdCache.get(norm)!;
     }
 
+    // Try Redis cache first (HIGH-01)
+    const redisKey = `coingecko_id:${norm}`;
+    try {
+        const cachedId = await redis.get<string>(redisKey);
+        if (cachedId) {
+            coingeckoIdCache.set(norm, cachedId);
+            console.log(`ℹ️ [Ingestion] Resolved CoinGecko ID for "${trimmed}" from Redis: "${cachedId}"`);
+            return cachedId;
+        }
+    } catch (err) {
+        console.warn('[Ingestion] Failed to read CoinGecko ID from Redis cache:', err);
+    }
+
     try {
         const apiKey = process.env.COINGECKO_API_KEY;
         const headers: Record<string, string> = { 'Accept': 'application/json' };
         if (apiKey) headers['x-cg-demo-api-key'] = apiKey;
 
-        const response = await fetch(`https://api.coingecko.com/api/v3/search?query=${encodeURIComponent(trimmed)}`, { headers });
+        const response = await fetchWithTimeout(`https://api.coingecko.com/api/v3/search?query=${encodeURIComponent(trimmed)}`, { headers }, 10_000);
         if (!response.ok) {
             throw new Error(`CoinGecko search failed with status ${response.status}`);
         }
@@ -355,6 +405,14 @@ async function resolveCoinGeckoId(symbol: string): Promise<string> {
 
         coingeckoIdCache.set(norm, resolvedId);
         console.log(`ℹ️ [Ingestion] Resolved CoinGecko ID for "${trimmed}" to "${resolvedId}"`);
+
+        // Write resolved ID to Redis with 1-hour TTL (HIGH-01)
+        try {
+            await redis.set(redisKey, resolvedId, { ex: 3600 });
+        } catch (err) {
+            console.warn('[Ingestion] Failed to write CoinGecko ID to Redis cache:', err);
+        }
+
         return resolvedId;
     } catch (error) {
         console.error(`[Ingestion Error] resolveCoinGeckoId failed for ${symbol}:`, error);
@@ -377,9 +435,10 @@ export async function fetchCoinGeckoMarkets(
         const headers: Record<string, string> = { 'Accept': 'application/json' };
         if (apiKey) headers['x-cg-demo-api-key'] = apiKey;
 
-        const response = await fetch(
+        const response = await fetchWithTimeout(
             `https://api.coingecko.com/api/v3/coins/markets?vs_currency=usd&ids=${resolvedId.toLowerCase()}`,
-            { headers }
+            { headers },
+            10_000
         );
         if (!response.ok) {
             return ingestionError<CoinGeckoMarketsData>(`CoinGecko API markets responded with status ${response.status}`);
@@ -431,9 +490,10 @@ export async function fetchCoinGeckoMacro(
         const includeCommunity = !requestedFields || requestedFields.includes('community_data');
         const includeDeveloper = !requestedFields || requestedFields.includes('developer_data');
 
-        const response = await fetch(
+        const response = await fetchWithTimeout(
             `https://api.coingecko.com/api/v3/coins/${resolvedId.toLowerCase()}?localization=false&tickers=false&community_data=${includeCommunity}&developer_data=${includeDeveloper}&sparkline=false`,
-            { headers }
+            { headers },
+            10_000
         );
 
         if (!response.ok) {

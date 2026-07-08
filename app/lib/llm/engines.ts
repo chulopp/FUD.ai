@@ -1,20 +1,19 @@
 import https from 'https';
+import { fetchWithTimeout } from '../utils/fetch-with-timeout';
 
 // ─────────────────────────────────────────────────────────────
 // Keep-Alive HTTPS Agent — reuses TCP connections across parallel
-// DeepSeek API calls during MCTS rollouts, eliminating per-call
+// API calls during MCTS rollouts, eliminating per-call
 // TCP handshake overhead (~50-100ms per connection).
-// Scoped to this module to avoid affecting other fetch calls.
 // ─────────────────────────────────────────────────────────────
 const KEEP_ALIVE_AGENT = new https.Agent({
   keepAlive: true,
   keepAliveMsecs: 10000, // send TCP keep-alive every 10 seconds
-  maxSockets: 20,        // allow up to 20 parallel sockets to DeepSeek
+  maxSockets: 20,
 });
 
 // ─────────────────────────────────────────────────────────────
 // HeavyweightEngine result — bundles content + token usage
-// so callers can log per-step costs accurately.
 // ─────────────────────────────────────────────────────────────
 export interface HeavyweightResult {
   content: string;
@@ -25,182 +24,169 @@ export interface HeavyweightResult {
   };
 }
 
-// ─────────────────────────────────────────────────────────────
-// Lightweight Engine
-// Primary: Nvidia Nemotron 30B via OpenRouter
-// Fallback: Gemini 2.5 Flash via Gemini API
-// ─────────────────────────────────────────────────────────────
-export async function runLightweightEngine(systemPrompt: string, userPrompt: string): Promise<string> {
-    const openrouterApiKey = process.env.OPENROUTER_API_KEY;
-    const geminiApiKey = process.env.GEMINI_API_KEY;
-    
-    // Step 1: Try Primary (Nvidia Nemotron 30B via OpenRouter)
-    if (openrouterApiKey) {
-        try {
-            const response = await fetch("https://openrouter.ai/api/v1/chat/completions", {
-                method: "POST",
-                headers: {
-                    "Authorization": `Bearer ${openrouterApiKey}`,
-                    "HTTP-Referer": process.env.APP_URL || "https://fud.ai",
-                    "X-Title": "FUD.ai Epistemic Swarm",
-                    "Content-Type": "application/json"
-                },
-                body: JSON.stringify({
-                    model: "nvidia/nemotron-3-nano-omni-30b-a3b-reasoning:free",
-                    messages: [
-                        { role: "system", content: systemPrompt },
-                        { role: "user", content: userPrompt }
-                    ]
-                })
-            });
+export type LLMProvider = 'openrouter' | 'bedrock' | 'deepseek';
 
-            if (response.ok) {
-                const data = await response.json();
-                const content = data?.choices?.[0]?.message?.content;
-                if (content) return content;
-            } else {
-                console.warn(`[LLM Warning] OpenRouter primary returned status ${response.status}. Trying fallback...`);
-            }
-        } catch (error) {
-            console.error("[LLM Error] OpenRouter primary failed. Trying fallback...", error);
-        }
-    } else {
-        console.warn("[LLM Warning] OPENROUTER_API_KEY is missing. Trying fallback...");
-    }
-
-    // Step 2: Fallback (Gemini 2.5 Flash via official Gemini API)
-    if (geminiApiKey) {
-        try {
-            const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${geminiApiKey}`, {
-                method: "POST",
-                headers: {
-                    "Content-Type": "application/json"
-                },
-                body: JSON.stringify({
-                    contents: [
-                        {
-                            parts: [
-                                { text: userPrompt }
-                            ]
-                        }
-                    ],
-                    systemInstruction: {
-                        parts: [
-                            { text: systemPrompt }
-                        ]
-                    }
-                })
-            });
-
-            if (response.ok) {
-                const data = await response.json();
-                const content = data?.candidates?.[0]?.content?.parts?.[0]?.text;
-                if (content) return content;
-            } else {
-                console.warn(`[LLM Warning] Gemini fallback returned status ${response.status}`);
-            }
-        } catch (error) {
-            console.error("[LLM Error] Gemini fallback failed:", error);
-        }
-    } else {
-        console.warn("[LLM Warning] GEMINI_API_KEY is missing.");
-    }
-
-    return JSON.stringify({ error: "Lightweight Engine failed on all targets", fallback: true });
+export interface CascadeModel {
+    provider: LLMProvider;
+    modelId: string;
 }
 
 // ─────────────────────────────────────────────────────────────
-// Heavyweight Engine — DeepSeek API (direct, not via OpenCode Go)
-//
-// Reliability contract:
-//   • 2x exponential-backoff retries (2s → 4s) before declaring failure.
-//   • On permanent failure, THROWS an Error — callers MUST catch and
-//     convert to a degraded verdict.  We do NOT return parseable fallback
-//     JSON because that silently masquerades as a real analysis result.
-//
-// Bybit note: api.bybit.com is blocked in Indonesia; this system uses
-// api.bytick.com as the production endpoint (set via BYBIT_BASE_URL env).
-// api-testnet.bytick.com is the testnet fallback for CI/local dev.
+// Multi-Tier Cascade Helper
 // ─────────────────────────────────────────────────────────────
+async function executeLLMWithCascade(
+    systemPrompt: string,
+    userPrompt: string,
+    cascadeArray: CascadeModel[]
+): Promise<HeavyweightResult> {
+    const openrouterApiKey = process.env.OPENROUTER_API_KEY;
+    const deepseekApiKey = process.env.DEEPSEEK_API_KEY;
 
-const HEAVYWEIGHT_MAX_RETRIES = 2;
-const HEAVYWEIGHT_BASE_DELAY_MS = 2000;
+    let lastError: Error = new Error("Empty cascade array");
 
+    for (const model of cascadeArray) {
+        try {
+            console.log(`[LLM Cascade] Attempting model ${model.modelId} via ${model.provider}...`);
+            
+            if (model.provider === 'openrouter') {
+                if (!openrouterApiKey) throw new Error("OPENROUTER_API_KEY missing");
+                
+                const response = await fetchWithTimeout("https://openrouter.ai/api/v1/chat/completions", {
+                    method: "POST",
+                    headers: {
+                        "Authorization": `Bearer ${openrouterApiKey}`,
+                        "HTTP-Referer": process.env.APP_URL || "https://fud.ai",
+                        "X-Title": "FUD.ai Epistemic Swarm",
+                        "Content-Type": "application/json"
+                    },
+                    body: JSON.stringify({
+                        model: model.modelId,
+                        messages: [
+                            { role: "system", content: systemPrompt },
+                            { role: "user", content: userPrompt }
+                        ]
+                    })
+                }, 25_000); // 25s timeout for OpenRouter cascade
+
+                if (!response.ok) {
+                    const errText = await response.text();
+                    throw new Error(`OpenRouter returned status ${response.status}: ${errText}`);
+                }
+
+                const data = await response.json();
+                const content = data?.choices?.[0]?.message?.content;
+                if (!content) throw new Error("OpenRouter returned empty content");
+                
+                return {
+                    content,
+                    usage: {
+                        prompt_tokens: data?.usage?.prompt_tokens ?? 0,
+                        completion_tokens: data?.usage?.completion_tokens ?? 0,
+                        cached_tokens: data?.usage?.prompt_tokens_details?.cached_tokens ?? 0,
+                    }
+                };
+
+            } else if (model.provider === 'deepseek') {
+                if (!deepseekApiKey) throw new Error("DEEPSEEK_API_KEY missing");
+                const baseUrl = process.env.DEEPSEEK_BASE_URL || 'https://api.deepseek.com';
+                const endpoint = `${baseUrl.replace(/\/$/, '')}/v1/chat/completions`;
+                
+                const response = await fetchWithTimeout(endpoint, {
+                    method: "POST",
+                    headers: {
+                        "Authorization": `Bearer ${deepseekApiKey}`,
+                        "Content-Type": "application/json"
+                    },
+                    body: JSON.stringify({
+                        model: model.modelId,
+                        messages: [
+                            { role: "system", content: systemPrompt },
+                            { role: "user", content: userPrompt }
+                        ],
+                        response_format: { type: "json_object" }
+                    }),
+                    // @ts-ignore
+                    agent: KEEP_ALIVE_AGENT,
+                } as any, 25_000);
+
+                if (!response.ok) {
+                    const errText = await response.text();
+                    throw new Error(`DeepSeek returned status ${response.status}: ${errText}`);
+                }
+
+                const data = await response.json();
+                const content = data?.choices?.[0]?.message?.content;
+                if (!content) throw new Error("DeepSeek returned empty content");
+                
+                return {
+                    content,
+                    usage: {
+                        prompt_tokens: data?.usage?.prompt_tokens ?? 0,
+                        completion_tokens: data?.usage?.completion_tokens ?? 0,
+                        cached_tokens: data?.usage?.prompt_tokens_details?.cached_tokens ?? 0,
+                    }
+                };
+            }
+        } catch (error: any) {
+            lastError = error instanceof Error ? error : new Error(String(error));
+            console.warn(`[LLM Cascade] Model ${model.modelId} failed: ${lastError.message}. Falling back...`);
+        }
+    }
+
+    throw new Error(`heavyweight_engine_unavailable: All cascade models failed. Last error: ${lastError.message}`);
+}
+
+// ─────────────────────────────────────────────────────────────
+// Lightweight Engine
+// ─────────────────────────────────────────────────────────────
+export async function runLightweightEngine(systemPrompt: string, userPrompt: string): Promise<string> {
+    const cascade: CascadeModel[] = [
+        { provider: 'openrouter', modelId: 'nvidia/nemotron-3-super-120b-a12b:free' },
+        { provider: 'openrouter', modelId: 'google/gemma-4-31b-it:free' },
+        { provider: 'openrouter', modelId: 'poolside/laguna-m.1:free' },
+        { provider: 'openrouter', modelId: 'poolside/laguna-xs-2.1:free' },
+        { provider: 'openrouter', modelId: 'cohere/north-mini-code:free' },
+        { provider: 'openrouter', modelId: 'nvidia/nemotron-3.5-content-safety:free' },
+        { provider: 'openrouter', modelId: 'nvidia/nemotron-3-nano-30b-a3b:free' },
+        { provider: 'openrouter', modelId: 'nvidia/nemotron-nano-12b-v2-vl:free' },
+        { provider: 'openrouter', modelId: 'openai/gpt-oss-20b:free' },
+        { provider: 'openrouter', modelId: 'cognitivecomputations/dolphin-mistral-24b-venice-edition:free' },
+        { provider: 'openrouter', modelId: 'meta-llama/llama-3.2-3b-instruct:free' },
+        { provider: 'openrouter', modelId: 'meta-llama/llama-3.3-70b-instruct:free' }
+    ];
+
+    try {
+        const result = await executeLLMWithCascade(systemPrompt, userPrompt, cascade);
+        return result.content;
+    } catch (error: any) {
+        console.error("[LLM Error] Lightweight Cascade failed completely:", error);
+        return JSON.stringify({ error: "Lightweight Engine failed on all targets", fallback: true });
+    }
+}
+
+// ─────────────────────────────────────────────────────────────
+// Heavyweight Engine
+// ─────────────────────────────────────────────────────────────
 export async function runHeavyweightEngine(
     systemPrompt: string,
     userPrompt: string
 ): Promise<HeavyweightResult> {
-    const apiKey = process.env.DEEPSEEK_API_KEY;
-    // Direct DeepSeek API — not routed via OpenCode Go which had production
-    // timeouts during testing. See PRD architecture decisions.
-    const baseUrl = process.env.DEEPSEEK_BASE_URL || 'https://api.deepseek.com';
+    const cascade: CascadeModel[] = [
+        { provider: 'deepseek', modelId: 'deepseek-chat' }, // Primary Model
+        { provider: 'openrouter', modelId: 'nvidia/nemotron-3-super-120b-a12b:free' }, // Fallback
+        { provider: 'openrouter', modelId: 'qwen/qwen3-next-80b-a3b-instruct:free' },
+        { provider: 'openrouter', modelId: 'openai/gpt-oss-120b:free' },
+        { provider: 'openrouter', modelId: 'qwen/qwen3-coder:free' },
+        { provider: 'openrouter', modelId: 'nousresearch/hermes-3-llama-3.1-405b:free' },
+        // Reliable Lightweight Fallbacks
+        { provider: 'openrouter', modelId: 'poolside/laguna-xs-2.1:free' },
+        { provider: 'openrouter', modelId: 'cohere/north-mini-code:free' },
+        { provider: 'openrouter', modelId: 'nvidia/nemotron-3-nano-30b-a3b:free' },
+        { provider: 'openrouter', modelId: 'openai/gpt-oss-20b:free' },
+        { provider: 'openrouter', modelId: 'meta-llama/llama-3.3-70b-instruct:free' }
+    ];
 
-    if (!apiKey) {
-        throw new Error('heavyweight_engine_unavailable: DEEPSEEK_API_KEY is not configured');
-    }
-
-    const endpoint = `${baseUrl.replace(/\/$/, '')}/v1/chat/completions`;
-    let lastError: Error = new Error('Unknown error');
-
-    for (let attempt = 0; attempt <= HEAVYWEIGHT_MAX_RETRIES; attempt++) {
-        if (attempt > 0) {
-            const delay = HEAVYWEIGHT_BASE_DELAY_MS * Math.pow(2, attempt - 1);
-            console.warn(`[HeavyweightEngine] Retry ${attempt}/${HEAVYWEIGHT_MAX_RETRIES} in ${delay}ms...`);
-            await new Promise(r => setTimeout(r, delay));
-        }
-
-        try {
-            const response = await fetch(endpoint, {
-                method: "POST",
-                headers: {
-                    "Authorization": `Bearer ${apiKey}`,
-                    "Content-Type": "application/json"
-                },
-                body: JSON.stringify({
-                    model: "deepseek-chat",
-                    messages: [
-                        { role: "system", content: systemPrompt },
-                        { role: "user", content: userPrompt }
-                    ],
-                    response_format: { type: "json_object" }
-                }),
-                // @ts-ignore — Node.js native fetch supports the 'agent' option
-                // for connection reuse via keep-alive. This is a Node.js-only
-                // feature and is safely ignored in Edge/browser environments.
-                agent: KEEP_ALIVE_AGENT,
-            });
-
-            if (!response.ok) {
-                const errText = await response.text();
-                throw new Error(`DeepSeek responded with status ${response.status}: ${errText}`);
-            }
-
-            const data = await response.json();
-            const content = data?.choices?.[0]?.message?.content;
-
-            if (!content) {
-                throw new Error('DeepSeek returned empty content');
-            }
-
-            const u = data.usage ?? {};
-            return {
-                content,
-                usage: {
-                    prompt_tokens: u.prompt_tokens ?? 0,
-                    completion_tokens: u.completion_tokens ?? 0,
-                    cached_tokens: u.prompt_tokens_details?.cached_tokens ?? 0,
-                }
-            };
-        } catch (error: any) {
-            lastError = error instanceof Error ? error : new Error(String(error));
-            console.error(`[HeavyweightEngine] Attempt ${attempt + 1}/${HEAVYWEIGHT_MAX_RETRIES + 1} failed:`, lastError.message);
-        }
-    }
-
-    // All retries exhausted — throw so callers can return a proper degraded verdict.
-    // We intentionally do NOT return parseable JSON here because that would allow
-    // downstream code to accidentally treat the failure as a real analysis result.
-    throw new Error(`heavyweight_engine_unavailable: ${lastError.message}`);
+    return await executeLLMWithCascade(systemPrompt, userPrompt, cascade);
 }
 
 // ─────────────────────────────────────────────────────────────
@@ -280,60 +266,69 @@ export async function runVisionEngine(systemPrompt: string, userPrompt: string, 
         console.warn("[LLM Warning] GEMINI_API_KEY missing or image data empty. Trying fallback...");
     }
 
-    // Step 2: Fallback (Nvidia Nemotron 30B via OpenRouter)
+    // Step 2: Fallbacks via OpenRouter
     if (openrouterApiKey) {
-        try {
-            const messagesPayload: any = [
-                {
-                    role: "user",
-                    content: [
-                        { type: "text", text: userPrompt }
-                    ]
+        const fallbacks = [
+            "google/gemma-4-31b-it:free",
+            "google/gemma-4-26b-a4b-it:free",
+            "nvidia/nemotron-nano-12b-v2-vl:free"
+        ];
+
+        for (const fallbackModel of fallbacks) {
+            try {
+                console.log(`[LLM Cascade] Attempting Vision fallback model ${fallbackModel}...`);
+                const messagesPayload: any = [
+                    {
+                        role: "user",
+                        content: [
+                            { type: "text", text: userPrompt }
+                        ]
+                    }
+                ];
+
+                if (base64Data) {
+                    messagesPayload[0].content.push({
+                        type: "image_url",
+                        image_url: {
+                            url: `data:${mimeType};base64,${base64Data}`
+                        }
+                    });
+                } else if (imageUrl.startsWith("http://") || imageUrl.startsWith("https://")) {
+                    messagesPayload[0].content.push({
+                        type: "image_url",
+                        image_url: {
+                            url: imageUrl
+                        }
+                    });
                 }
-            ];
 
-            if (base64Data) {
-                messagesPayload[0].content.push({
-                    type: "image_url",
-                    image_url: {
-                        url: `data:${mimeType};base64,${base64Data}`
-                    }
+                const response = await fetch("https://openrouter.ai/api/v1/chat/completions", {
+                    method: "POST",
+                    headers: {
+                        "Authorization": `Bearer ${openrouterApiKey}`,
+                        "HTTP-Referer": process.env.APP_URL || "https://fud.ai",
+                        "X-Title": "FUD.ai Epistemic Swarm",
+                        "Content-Type": "application/json"
+                    },
+                    body: JSON.stringify({
+                        model: fallbackModel,
+                        messages: [
+                            { role: "system", content: systemPrompt },
+                            ...messagesPayload
+                        ]
+                    })
                 });
-            } else if (imageUrl.startsWith("http://") || imageUrl.startsWith("https://")) {
-                messagesPayload[0].content.push({
-                    type: "image_url",
-                    image_url: {
-                        url: imageUrl
-                    }
-                });
-            }
 
-            const response = await fetch("https://openrouter.ai/api/v1/chat/completions", {
-                method: "POST",
-                headers: {
-                    "Authorization": `Bearer ${openrouterApiKey}`,
-                    "HTTP-Referer": process.env.APP_URL || "https://fud.ai",
-                    "X-Title": "FUD.ai Epistemic Swarm",
-                    "Content-Type": "application/json"
-                },
-                body: JSON.stringify({
-                    model: "nvidia/nemotron-3-nano-omni-30b-a3b-reasoning:free",
-                    messages: [
-                        { role: "system", content: systemPrompt },
-                        ...messagesPayload
-                    ]
-                })
-            });
-
-            if (response.ok) {
-                const data = await response.json();
-                const content = data?.choices?.[0]?.message?.content;
-                if (content) return content;
-            } else {
-                console.warn(`[LLM Warning] OpenRouter Fallback Vision returned status ${response.status}`);
+                if (response.ok) {
+                    const data = await response.json();
+                    const content = data?.choices?.[0]?.message?.content;
+                    if (content) return content;
+                } else {
+                    console.warn(`[LLM Warning] OpenRouter Vision Fallback ${fallbackModel} returned status ${response.status}`);
+                }
+            } catch (error) {
+                console.error(`[LLM Error] OpenRouter Vision Fallback ${fallbackModel} failed:`, error);
             }
-        } catch (error) {
-            console.error("[LLM Error] OpenRouter Fallback Vision failed:", error);
         }
     } else {
         console.warn("[LLM Warning] OPENROUTER_API_KEY is missing for fallback vision.");

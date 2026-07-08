@@ -32,9 +32,7 @@ export function buildIngestionKey(
 
 export async function getCachedIngestion<T>(key: string): Promise<T | null> {
   try {
-    const raw = await redis.get<string>(key);
-    if (!raw) return null;
-    return typeof raw === 'string' ? JSON.parse(raw) as T : raw as unknown as T;
+    return await redis.get<T>(key);
   } catch (err) {
     console.warn(`[IngestionCache] Cache GET failed for key "${key}":`, err);
     return null;
@@ -51,7 +49,7 @@ export async function setCachedIngestion<T>(
   ttlSeconds: number = INGESTION_TTL_SECONDS
 ): Promise<void> {
   try {
-    await redis.set(key, JSON.stringify(data), { ex: ttlSeconds });
+    await redis.set(key, data, { ex: ttlSeconds });
     console.log(`[IngestionCache] Cached key "${key}" for ${ttlSeconds}s`);
   } catch (err) {
     // Non-fatal — cache failures should never break the pipeline

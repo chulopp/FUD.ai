@@ -59,14 +59,15 @@ async function main() {
   banner('[2/2] Twitter — searchTwitterSentiment("$BONK"), limit 10');
   try {
     const twStart = Date.now();
-    const tweets = await searchTwitterSentiment('$BONK', 10);
+    const searchRes = await searchTwitterSentiment('$BONK', 10);
+    const tweets = searchRes.status === 'ok' ? searchRes.tweets : [];
     const dt = ((Date.now() - twStart) / 1000).toFixed(2);
     console.log(`✅ Retrieved ${tweets.length} tweets in ${dt}s`);
     if (tweets.length > 0) {
       console.log('— TWEETS —');
       console.log(pretty(tweets));
     } else {
-      console.log('⚠️  No tweets returned (guest rate-limit likely — set TWITTER_USERNAME/PASSWORD).');
+      console.log('⚠️  No tweets returned (guest rate-limit likely — set TWITTER_USERNAME/PASSWORD or check API status). Status: ' + searchRes.status);
     }
     result.twitter = { ok: tweets.length > 0, count: tweets.length, tweets };
   } catch (err) {

@@ -21,6 +21,10 @@ export interface JobRecord {
 // Job TTL in seconds: 10 minutes
 const JOB_TTL_SECONDS = 600;
 
+// Terminal statuses that cannot be regressed from.
+const TERMINAL_STATUSES = new Set<JobStatus>(['completed', 'failed']);
+const REGRESSING_STATUSES = new Set<JobStatus>(['running', 'pending']);
+
 // ─────────────────────────────────────────────────────────────
 // Redis key helper
 // ─────────────────────────────────────────────────────────────
@@ -40,8 +44,8 @@ export async function createJob(jobId: string, coinSymbol: string): Promise<void
     updated_at: new Date().toISOString(),
     coin_symbol: coinSymbol,
   };
-  // SET with EX (expire in 10 min)
-  await redis.set(jobKey(jobId), JSON.stringify(record), { ex: JOB_TTL_SECONDS });
+  // Let the Upstash SDK handle serialization natively
+  await redis.set(jobKey(jobId), record, { ex: JOB_TTL_SECONDS });
 }
 
 // ─────────────────────────────────────────────────────────────
@@ -50,20 +54,32 @@ export async function createJob(jobId: string, coinSymbol: string): Promise<void
 
 export async function updateJob(jobId: string, patch: Partial<JobRecord>): Promise<void> {
   const key = jobKey(jobId);
-  const raw = await redis.get<string>(key);
-  if (!raw) {
+  const existing = await redis.get<JobRecord>(key);
+  if (!existing) {
     console.warn(`[JobStore] updateJob: job ${jobId} not found in Redis — may have expired`);
     return;
   }
-  const existing: JobRecord = typeof raw === 'string' ? JSON.parse(raw) : raw as unknown as JobRecord;
+
+  // HIGH-10: Refuse to regress status from completed/failed back to running/pending
+  if (
+    TERMINAL_STATUSES.has(existing.status) &&
+    patch.status &&
+    REGRESSING_STATUSES.has(patch.status)
+  ) {
+    console.warn(
+      `[JobStore] Refusing to regress job ${jobId} status from terminal "${existing.status}" to "${patch.status}"`
+    );
+    return;
+  }
+
   const updated: JobRecord = {
     ...existing,
     ...patch,
     updated_at: new Date().toISOString(),
   };
-  // Re-set with the original TTL. We use EX = JOB_TTL_SECONDS from creation
-  // time — keeping a fixed absolute expiry is simpler than tracking remaining TTL.
-  await redis.set(key, JSON.stringify(updated), { ex: JOB_TTL_SECONDS });
+
+  // Re-set with the original TTL. Let Upstash SDK serialize.
+  await redis.set(key, updated, { ex: JOB_TTL_SECONDS });
 }
 
 // ─────────────────────────────────────────────────────────────
@@ -71,12 +87,11 @@ export async function updateJob(jobId: string, patch: Partial<JobRecord>): Promi
 // ─────────────────────────────────────────────────────────────
 
 export async function getJob(jobId: string): Promise<JobRecord | null> {
-  const raw = await redis.get<string>(jobKey(jobId));
-  if (!raw) return null;
   try {
-    return typeof raw === 'string' ? JSON.parse(raw) : raw as unknown as JobRecord;
-  } catch {
-    console.error(`[JobStore] getJob: failed to parse record for ${jobId}`);
+    return await redis.get<JobRecord>(jobKey(jobId));
+  } catch (err) {
+    console.error(`[JobStore] getJob: failed to retrieve or parse record for ${jobId}`, err);
     return null;
   }
 }
+

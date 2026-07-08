@@ -1,3 +1,9 @@
+/**
+ * security.ts — GoPlus (EVM) and RugCheck (Solana) token security ingestion.
+ *
+ * CRITICAL-01 fix: both fetch() calls replaced with fetchWithTimeout() (10s).
+ */
+
 import { DispatcherStrategy } from '../mcts/dispatcher';
 import {
   type IngestionResult,
@@ -8,6 +14,7 @@ import {
   ingestionError,
   notCalled,
 } from './types';
+import { fetchWithTimeout } from '../utils/fetch-with-timeout';
 
 // ─────────────────────────────────────────────────────────────
 // GoPlus Token Security — EVM chains only
@@ -39,7 +46,7 @@ export async function fetchGoPlusSecurity(
     }
 
     try {
-        const response = await fetch(url, { headers });
+        const response = await fetchWithTimeout(url, { headers }, 10_000);
 
         if (!response.ok) {
             return ingestionError<GoPlusData>(`GoPlus API responded with status ${response.status}`);
@@ -128,9 +135,11 @@ export async function fetchRugCheckScore(
     }
 
     try {
-        const response = await fetch(`https://api.rugcheck.xyz/v1/tokens/${contractAddress}/report`, {
-            headers
-        });
+        const response = await fetchWithTimeout(
+            `https://api.rugcheck.xyz/v1/tokens/${contractAddress}/report`,
+            { headers },
+            10_000
+        );
 
         if (!response.ok) {
             return ingestionError<RugCheckData>(`RugCheck API responded with status ${response.status}`);

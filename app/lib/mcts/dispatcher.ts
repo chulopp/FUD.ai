@@ -1,31 +1,44 @@
+/**
+ * dispatcher.ts — Granular data routing dispatcher for FUD.ai.
+ *
+ * CRITICAL-01 fix: fetch() in the Gemini primary path replaced with
+ *   fetchWithTimeout() (30s for LLM inference).
+ * CRITICAL-03 fix: LLM JSON output is now validated against DispatcherStrategySchema
+ *   before being used as a DispatcherStrategy. On validation failure, a full
+ *   default strategy (all sources) is returned so no data source is silently skipped
+ *   due to a malformed dispatcher response.
+ */
+
+import { z } from 'zod';
 import { runHeavyweightEngine } from '../llm/engines';
+import { fetchWithTimeout } from '../utils/fetch-with-timeout';
 
 export const REGISTRY_SCHEMA = {
-  bybit_v5: { 
-    endpoints: { 
-      "/v5/market/orderbook": ["a (asks)", "b (bids)"], 
-      "/v5/market/tickers": ["lastPrice", "price24hPcnt", "volume24h", "bid1Price", "ask1Price"] 
-    } 
+  bybit_v5: {
+    endpoints: {
+      "/v5/market/orderbook": ["a (asks)", "b (bids)"],
+      "/v5/market/tickers": ["lastPrice", "price24hPcnt", "volume24h", "bid1Price", "ask1Price"]
+    }
   },
-  goplus: { 
-    endpoints: { 
-      "/api/v1/token_security": ["is_open_source", "is_proxy", "is_mintable", "owner_address", "hidden_owner", "is_honeypot", "buy_tax", "sell_tax", "holder_count", "is_anti_whale"] 
-    } 
+  goplus: {
+    endpoints: {
+      "/api/v1/token_security": ["is_open_source", "is_proxy", "is_mintable", "owner_address", "hidden_owner", "is_honeypot", "buy_tax", "sell_tax", "holder_count", "is_anti_whale"]
+    }
   },
-  rugcheck: { 
-    endpoints: { 
-      "/v1/tokens/{mint}/report": ["score", "rugged", "risks", "totalMarketLiquidity", "topHolders"] 
-    } 
+  rugcheck: {
+    endpoints: {
+      "/v1/tokens/{mint}/report": ["score", "rugged", "risks", "totalMarketLiquidity", "topHolders"]
+    }
   },
-  dexscreener: { 
-    endpoints: { 
-      "/latest/dex/pairs/{chainId}/{pairId}": ["priceUsd", "txns.h24", "volume.h24", "priceChange.h24", "liquidity.usd", "fdv", "marketCap"] 
-    } 
+  dexscreener: {
+    endpoints: {
+      "/latest/dex/pairs/{chainId}/{pairId}": ["priceUsd", "txns.h24", "volume.h24", "priceChange.h24", "liquidity.usd", "fdv", "marketCap"]
+    }
   },
-  defillama: { 
-    endpoints: { 
-      "/protocols": ["tvl", "change_1d", "change_7d"] 
-    } 
+  defillama: {
+    endpoints: {
+      "/protocols": ["tvl", "change_1d", "change_7d"]
+    }
   },
   coingecko: {
     endpoints: {
@@ -88,6 +101,136 @@ export interface DispatcherStrategy {
   };
 }
 
+// ─────────────────────────────────────────────────────────────
+// CRITICAL-03: Zod schema for validating dispatcher LLM output
+// ─────────────────────────────────────────────────────────────
+
+const DispatcherStrategySchema = z.object({
+  bybit_v5: z.object({
+    endpoints: z.object({
+      "/v5/market/orderbook": z.array(z.string()).optional(),
+      "/v5/market/tickers": z.array(z.string()).optional(),
+    }),
+  }).optional(),
+  goplus: z.object({
+    endpoints: z.object({
+      "/api/v1/token_security": z.array(z.string()).optional(),
+    }),
+  }).optional(),
+  rugcheck: z.object({
+    endpoints: z.object({
+      "/v1/tokens/{mint}/report": z.array(z.string()).optional(),
+    }),
+  }).optional(),
+  dexscreener: z.object({
+    endpoints: z.object({
+      "/latest/dex/pairs/{chainId}/{pairId}": z.array(z.string()).optional(),
+    }),
+  }).optional(),
+  defillama: z.object({
+    endpoints: z.object({
+      "/protocols": z.array(z.string()).optional(),
+    }),
+  }).optional(),
+  coingecko: z.object({
+    endpoints: z.object({
+      "/coins/markets": z.array(z.string()).optional(),
+      "/coins/{id}": z.array(z.string()).optional(),
+    }),
+  }).optional(),
+  social_rapidapi_twitter: z.object({
+    tools: z.array(z.string()),
+  }).optional(),
+  social_telegram: z.object({
+    tools: z.array(z.string()),
+  }).optional(),
+}).passthrough(); // allow unknown keys to not throw, they'll just be ignored
+
+/**
+ * The full default strategy — all major sources enabled.
+ * Used as a safe fallback when the dispatcher LLM output fails Zod validation.
+ * This ensures no data source is silently skipped due to a malformed response.
+ */
+const DEFAULT_STRATEGY: DispatcherStrategy = {
+  bybit_v5: {
+    endpoints: {
+      "/v5/market/orderbook": ["a (asks)", "b (bids)"],
+      "/v5/market/tickers": ["lastPrice", "price24hPcnt", "volume24h", "bid1Price", "ask1Price"],
+    },
+  },
+  dexscreener: {
+    endpoints: {
+      "/latest/dex/pairs/{chainId}/{pairId}": ["priceUsd", "txns.h24", "volume.h24", "priceChange.h24", "liquidity.usd", "fdv", "marketCap"],
+    },
+  },
+  coingecko: {
+    endpoints: {
+      "/coins/markets": ["current_price", "market_cap", "total_volume", "price_change_percentage_24h"],
+    },
+  },
+  defillama: {
+    endpoints: {
+      "/protocols": ["tvl", "change_1d", "change_7d"],
+    },
+  },
+  social_rapidapi_twitter: { tools: ["search_tweets"] },
+  social_telegram: { tools: ["scan_channels"] },
+};
+
+/**
+ * Unifies JSON extraction logic by stripping markdown fences and searching backwards
+ * for a valid JSON block (MEDIUM-04).
+ */
+function extractJsonFromLLMOutput(raw: string): any {
+  try {
+    const cleaned = raw.trim().replace(/^```(?:json)?\s*/i, '').replace(/\s*```\s*$/, '');
+    return JSON.parse(cleaned);
+  } catch {
+    let idx = raw.lastIndexOf('{');
+    while (idx >= 0) {
+      const candidate = raw.slice(idx).trim().replace(/\s*```\s*$/, '');
+      try {
+        const parsed = JSON.parse(candidate);
+        if (parsed && typeof parsed === 'object') {
+          return parsed;
+        }
+      } catch {
+        // Continue searching backwards
+      }
+      idx = raw.lastIndexOf('{', idx - 1);
+    }
+
+    const match = raw.match(/\{[\s\S]*\}/);
+    if (match) {
+      try {
+        return JSON.parse(match[0]);
+      } catch {
+        return null;
+      }
+    }
+    return null;
+  }
+}
+
+/**
+ * Validates a raw LLM-parsed object against DispatcherStrategySchema.
+ * On failure: logs the validation errors and returns DEFAULT_STRATEGY so that
+ * all ingestion sources remain enabled (no silent skip).
+ */
+function validateStrategy(raw: unknown): DispatcherStrategy {
+  const result = DispatcherStrategySchema.safeParse(raw);
+  if (result.success) {
+    return result.data as DispatcherStrategy;
+  }
+
+  console.warn(
+    '[Dispatcher] LLM output failed Zod schema validation — falling back to DEFAULT_STRATEGY.',
+    'Validation errors:',
+    result.error.flatten()
+  );
+  return DEFAULT_STRATEGY;
+}
+
 const DISPATCHER_SYSTEM_PROMPT = `You are a granular data routing dispatcher for FUD.ai.
 Analyze the user request for a token and determine which API endpoints and specific fields, or social-scraper tools, are required to inspect the safety, liquidity, and FUD claims surrounding the token.
 
@@ -134,67 +277,69 @@ Coin Symbol: ${clientRequest.coinSymbol}
 Contract Address: ${clientRequest.contractAddress || 'none'}
 Chain ID: ${clientRequest.chainId || '1'}`;
 
-  const geminiApiKey = process.env.GEMINI_API_KEY;
+  // Primary: DeepSeek v4 Flash via Heavyweight Engine
+  try {
+    console.log("🤖 [Dispatcher] Querying DeepSeek as primary LLM...");
+    const result = await runHeavyweightEngine(DISPATCHER_SYSTEM_PROMPT, userPrompt);
+    const parsed = extractJsonFromLLMOutput(result.content);
+    // CRITICAL-03: validate schema before returning
+    return validateStrategy(parsed);
+  } catch (error) {
+    console.warn("[Dispatcher Warning] DeepSeek Primary failed. Trying fallback...", error);
+  }
 
-  // Primary: Gemini 2.5 Flash via Gemini API
+  // Fallback: Gemini 2.5 Flash via Gemini API
+  // CRITICAL-01: uses fetchWithTimeout (30s for LLM inference)
+  const geminiApiKey = process.env.GEMINI_API_KEY;
   if (geminiApiKey) {
     try {
-      console.log("🤖 [Dispatcher] Querying Gemini 2.5 Flash as primary LLM...");
-      const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${geminiApiKey}`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json"
-        },
-        body: JSON.stringify({
-          contents: [
-            {
-              parts: [
-                { text: userPrompt }
-              ]
-            }
-          ],
-          systemInstruction: {
-            parts: [
-              { text: DISPATCHER_SYSTEM_PROMPT }
-            ]
+      console.log("🤖 [Dispatcher] Querying Gemini 2.5 Flash as fallback LLM...");
+      const response = await fetchWithTimeout(
+        `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${geminiApiKey}`,
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json"
           },
-          generationConfig: {
-            responseMimeType: "application/json"
-          }
-        })
-      });
+          body: JSON.stringify({
+            contents: [
+              {
+                parts: [
+                  { text: userPrompt }
+                ]
+              }
+            ],
+            systemInstruction: {
+              parts: [
+                { text: DISPATCHER_SYSTEM_PROMPT }
+              ]
+            },
+            generationConfig: {
+              responseMimeType: "application/json"
+            }
+          })
+        },
+        30_000 // 30s for LLM inference
+      );
 
       if (response.ok) {
         const data = await response.json();
         const content = data?.candidates?.[0]?.content?.parts?.[0]?.text;
         if (content) {
-          const parsed = JSON.parse(content.trim());
-          return parsed as DispatcherStrategy;
+          const parsed = extractJsonFromLLMOutput(content);
+          // CRITICAL-03: validate schema before returning
+          return validateStrategy(parsed);
         }
       } else {
-        console.warn(`[Dispatcher Warning] Gemini Primary returned status ${response.status}. Trying fallback...`);
+        console.warn(`[Dispatcher Warning] Gemini Fallback returned status ${response.status}.`);
       }
     } catch (error) {
-      console.error("[Dispatcher Error] Gemini Primary failed. Trying fallback...", error);
+      console.error("[Dispatcher Error] Gemini Fallback failed:", error);
     }
   } else {
-    console.warn("[Dispatcher Warning] GEMINI_API_KEY is missing. Trying fallback...");
+    console.warn("[Dispatcher Warning] GEMINI_API_KEY is missing, skipping Gemini fallback.");
   }
 
-  // Fallback: DeepSeek v4 Flash via DeepSeek API
-  try {
-    console.log("🤖 [Dispatcher] Querying DeepSeek v4 Flash as fallback LLM...");
-    const result = await runHeavyweightEngine(DISPATCHER_SYSTEM_PROMPT, userPrompt);
-    // Extract content string from HeavyweightResult
-    const raw = result.content;
-    // Strip markdown formatting if any
-    const cleaned = raw.trim().replace(/^```(?:json)?\s*/i, '').replace(/\s*```\s*$/, '');
-    const parsed = JSON.parse(cleaned);
-    return parsed as DispatcherStrategy;
-  } catch (error) {
-    console.error("[Dispatcher Error] DeepSeek Fallback failed:", error);
-  }
-
-  // Safe empty strategy fallback if everything fails
-  return {};
+  // Safe empty strategy fallback if everything fails — validateStrategy will upgrade to DEFAULT_STRATEGY
+  return validateStrategy({});
 }

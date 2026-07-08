@@ -23,5 +23,15 @@
     "id": "TC005",
     "title": "post api agent unknown fake coin returns 200 with fallback indicators",
     "description": "Test POST /api/agent with coin_symbol=FAKECOIN999 and a random fake contract_address. Verify response status is 202 Accepted with a job_id and poll_url. Poll GET /api/agent/[job_id] every 5 seconds until status is completed. Verify final status is completed with fallback=true or still returns a valid MCTS verdict. All schema fields must be present."
+  },
+  {
+    "id": "TC006",
+    "title": "post api agent ambiguous token returns honest verdict without infinite loop",
+    "description": "Test POST /api/agent with coin_symbol=AI and no contract_address field. Verify response status is 202 Accepted with a job_id and poll_url. Poll GET /api/agent/[job_id] every 5 seconds until status is completed or failed. Assert the job completes within 90 seconds (no infinite loop due to CRITICAL-04 fix). Assert that if the data is insufficient due to ambiguity, the final completed JSON body includes an executable_verdict of INSUFFICIENT_DATA or IGNORE_FUD with low confidence, ensuring the engine does not fabricate an outcome."
+  },
+  {
+    "id": "TC007",
+    "title": "post api agent simulated sybil and injection returns security signals",
+    "description": "Test POST /api/agent with coin_symbol=TESTFUD1. Verify response status is 202 Accepted with a job_id and poll_url. Poll GET /api/agent/[job_id] every 5 seconds until status is completed. This token is configured to fetch mock RapidAPI data containing duplicate prompt-injection payloads. Verify the completed response JSON contains an evidence_chain that includes '[SECURITY]' (injection detection) and '[SYBIL]' (coordination detection). Also verify coordination_signals object shows a unique_author_ratio < 0.5 and duplicate_text_cluster_size > 2."
   }
 ]

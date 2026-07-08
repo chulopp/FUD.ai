@@ -1,5 +1,12 @@
+/**
+ * rapidapi_twitter.ts — Twitter/X intel via RapidAPI "Twitter API 45".
+ *
+ * CRITICAL-01 fix: fetch() replaced with fetchWithTimeout() (10s).
+ */
+
 import { DispatcherStrategy } from '../mcts/dispatcher';
 import { type IngestionResult, type SocialIntelData, ok, empty, ingestionError, notCalled } from './types';
+import { fetchWithTimeout } from '../utils/fetch-with-timeout';
 
 export interface TweetResult {
   id: string;
@@ -19,16 +26,27 @@ export interface TweetResult {
  * @param query Search query.
  * @param limit Max results to parse (default 20).
  */
+export type TwitterSearchResult =
+  | { status: 'ok'; tweets: TweetResult[] }
+  | { status: 'error'; reason: string }
+  | { status: 'empty' };
+
+/**
+ * Searches recent tweets using the RapidAPI "Twitter API 45" by alexanderxbx.
+ *
+ * @param query Search query.
+ * @param limit Max results to parse (default 20).
+ */
 export async function searchTwitterRapidAPI(
   query: string,
   limit: number = 20
-): Promise<TweetResult[]> {
+): Promise<TwitterSearchResult> {
   const apiKey = process.env.RAPIDAPI_KEY;
   const apiHost = process.env.RAPIDAPI_HOST || 'twitter-api45.p.rapidapi.com';
 
   if (!apiKey) {
-    console.warn('[RapidAPI Twitter] RAPIDAPI_KEY is not defined. Returning empty array.');
-    return [];
+    console.warn('[RapidAPI Twitter] RAPIDAPI_KEY is not defined. Returning empty status.');
+    return { status: 'empty' };
   }
 
   const results: TweetResult[] = [];
@@ -36,23 +54,25 @@ export async function searchTwitterRapidAPI(
     const url = `https://${apiHost}/search.php?query=${encodeURIComponent(query)}&search_type=Latest`;
 
     console.log(`[RapidAPI Twitter] Fetching tweets for query: "${query}"...`);
-    const response = await fetch(url, {
+    const response = await fetchWithTimeout(url, {
       method: 'GET',
       headers: {
         'x-rapidapi-key': apiKey,
         'x-rapidapi-host': apiHost,
       },
-    });
+    }, 10_000);
 
     if (!response.ok) {
-      console.warn(`[RapidAPI Twitter] Request failed with status ${response.status}: ${response.statusText}`);
-      return [];
+      const errMsg = `Request failed with status ${response.status}: ${response.statusText}`;
+      console.warn(`[RapidAPI Twitter] ${errMsg}`);
+      return { status: 'error', reason: errMsg };
     }
 
     const data = await response.json();
     if (data.status !== 'ok' || !Array.isArray(data.timeline)) {
-      console.warn('[RapidAPI Twitter] API response status is not ok or timeline is missing.', data);
-      return [];
+      const errMsg = `API response status is not ok or timeline is missing. Status: ${data?.status}`;
+      console.warn(`[RapidAPI Twitter] ${errMsg}`, data);
+      return { status: 'error', reason: errMsg };
     }
 
     for (const item of data.timeline) {
@@ -94,12 +114,15 @@ export async function searchTwitterRapidAPI(
     }
 
     console.log(`[RapidAPI Twitter] Successfully parsed ${results.length} tweets.`);
+    if (results.length === 0) {
+      return { status: 'empty' };
+    }
+    return { status: 'ok', tweets: results };
   } catch (error) {
     const msg = error instanceof Error ? error.message : String(error);
     console.warn(`[RapidAPI Twitter] searchTwitterRapidAPI failed: ${msg}`);
+    return { status: 'error', reason: msg };
   }
-
-  return results;
 }
 
 /**
@@ -119,13 +142,16 @@ export async function fetchTwitterIntel(
   try {
     const cleanSymbol = coinSymbol.replace(/^[$]/, '').toUpperCase();
     const query = `$${cleanSymbol} OR ${cleanSymbol} crypto`;
-    const tweets = await searchTwitterRapidAPI(query, 20);
+    const searchRes = await searchTwitterRapidAPI(query, 20);
 
-    if (tweets.length === 0) {
+    if (searchRes.status === 'error') {
+      return ingestionError<SocialIntelData>(searchRes.reason);
+    }
+    if (searchRes.status === 'empty' || !searchRes.tweets || searchRes.tweets.length === 0) {
       return empty<SocialIntelData>();
     }
 
-    const posts = tweets.map(t => {
+    const posts = searchRes.tweets.map(t => {
       const timestamp = t.createdAt ? new Date(t.createdAt).getTime() : Date.now();
       return {
         username: t.username,
@@ -145,3 +171,4 @@ export async function fetchTwitterIntel(
     return ingestionError<SocialIntelData>(msg);
   }
 }
+

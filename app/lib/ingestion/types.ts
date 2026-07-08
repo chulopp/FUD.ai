@@ -127,3 +127,26 @@ export function ingestionError<T>(error_detail: string): IngestionResult<T> {
 export function notCalled<T>(): IngestionResult<T> {
   return { status: 'not_called', data: null };
 }
+
+// ─────────────────────────────────────────────────────────────
+// P1 Temporal Momentum & Lead-Lag Causality types
+// ─────────────────────────────────────────────────────────────
+
+export interface MomentumResult {
+  price_velocity_pct_per_min: number;
+  sentiment_velocity_posts_per_min: number;
+  window_minutes: number;
+  snapshot_count: number;
+  computed_at: string;
+}
+
+export interface CausalityResult {
+  narrative_precedes_price_action: boolean;
+  lag_minutes: number;
+  social_burst_timestamp_ms: number;
+  price_drop_timestamp_ms: number;
+  price_drop_pct: number;
+  confidence: 'high' | 'medium' | 'low';
+  analysis_window_hours: number;
+}
+

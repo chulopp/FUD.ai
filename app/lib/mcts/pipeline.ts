@@ -26,8 +26,14 @@ import type {
   CoinGeckoMacroData,
   DefiLlamaData,
   SocialIntelData,
+  MomentumResult,
+  CausalityResult,
 } from '../ingestion/types';
 import { computeCoordinationSignals, type CoordinationSignals } from '../ingestion/sybil_detector';
+import { pushMomentumSnapshot, computeMomentum } from '../ingestion/momentum';
+import { computeCausality } from '../ingestion/causality';
+import { recordPrediction, getCalibratedConfidence } from './calibration';
+
 
 // ─────────────────────────────────────────────────────────────
 // Types
@@ -59,6 +65,12 @@ export interface VerdictResult {
     | 'INSUFFICIENT_DATA';
   /** null when status === 'degraded' — clients must treat null as unusable */
   confidence: number | null;
+  /**
+   * P2 Calibration: LLM-classified market cap tier for this coin.
+   * Drives the evaluation window used by the calibration cron job.
+   * null when status === 'degraded'.
+   */
+  market_cap_category: 'meme' | 'low' | 'mid' | 'big' | null;
   served_from_cache: boolean;
   fallback?: boolean;
   reason?: string;
@@ -84,6 +96,8 @@ interface PipelineContext {
   // Source status map for grounding check
   sourceStatuses: Record<string, IngestionStatus>;
   coordinationSignals: CoordinationSignals;
+  momentumResult: MomentumResult | null;
+  causalityResult: CausalityResult | null;
 }
 
 // ─────────────────────────────────────────────────────────────
@@ -105,6 +119,7 @@ function makeDegradedVerdict(reason: string, logger?: PipelineStepLogger): Verdi
     ],
     executable_verdict: 'INSUFFICIENT_DATA',
     confidence: null,
+    market_cap_category: null,
     served_from_cache: false,
     fallback: true,
     reason: 'heavyweight_engine_unavailable',
@@ -115,6 +130,35 @@ function makeDegradedVerdict(reason: string, logger?: PipelineStepLogger): Verdi
       cross_platform_burst_window_minutes: 0,
     },
   };
+}
+
+function buildFallbackHypotheses(context: PipelineContext): Array<{ id: string; name: string; description: string; initial_probability: number }> {
+  const sym = context.coinSymbol;
+  const coord = context.coordinationSignals;
+  const causality = context.causalityResult;
+
+  return [
+    {
+      id: 'H1',
+      name: `${sym} FUD Exaggeration`,
+      description: `Claims about ${sym} appear exaggerated. Unique author ratio: ${coord.unique_author_ratio.toFixed(2)}.`,
+      initial_probability: 0.45,
+    },
+    {
+      id: 'H2',
+      name: `${sym} Genuine Risk`,
+      description: `On-chain/social indicators suggest risk indicators. Coordination cluster size: ${coord.duplicate_text_cluster_size}.`,
+      initial_probability: 0.35,
+    },
+    {
+      id: 'H3',
+      name: `${sym} Coordinated Campaign`,
+      description: causality?.narrative_precedes_price_action
+        ? `Narrative preceded price action by ${causality.lag_minutes.toFixed(0)} min — possible manufactured panic.`
+        : `Coordinated activity detected: ${coord.cross_platform_burst_window_minutes} min burst window.`,
+      initial_probability: 0.20,
+    },
+  ];
 }
 
 // ─────────────────────────────────────────────────────────────
@@ -174,6 +218,12 @@ COORDINATION & SYBIL DETECTION RULES:
 1. Utilize the pre-computed coordination metrics under "COORDINATION & SYBIL SIGNALS".
 2. If unique_author_ratio is < 0.3 or duplicate_text_cluster_size is >= 5, you MUST explicitly generate a hypothesis around "Coordinated Bot Manipulation" or "Sybil Attack".
 3. Reference these exact metrics in the hypothesis description and reasoning.
+
+TEMPORAL CAUSALITY RULES:
+4. Check "MARKET CAUSALITY & MOMENTUM" section in the context.
+5. If narrative_precedes_price_action is TRUE and lag_minutes > 0, you MUST generate a hypothesis named "Coordinated Pre-emptive FUD Campaign" and assign it initial_probability >= 0.6. This is the highest-priority signal — manufactured panic precedes market reaction.
+6. If narrative_precedes_price_action is FALSE (price moved first), generate a hypothesis named "Organic Panic Response" — the social fear is a reaction, not a catalyst.
+7. If momentum data is present: cite price_velocity_pct_per_min and sentiment_velocity_posts_per_min in the hypothesis descriptions to quantify the velocity of the event.
 
 ANTI-HALLUCINATION: Only reference data sources with status="ok". If a source is "error" or "not_called", DO NOT cite it.
 
@@ -236,6 +286,23 @@ Review all hypotheses, rollouts, and the cross-validator's output. Apply critica
 4. If major data sources are unavailable (status=error/not_called), confidence MUST be lower.
 5. If unique_author_ratio is < 0.3 or duplicate_text_cluster_size is >= 5, you MUST explicitly cite these exact metrics in the evidence_chain as proof of coordinated bot manipulation, prefixing them with '[SYBIL]' and assigning a weight of at least 0.10.
    Example: "[SYBIL] Coordinated bot manipulation detected: unique_author_ratio is 0.15 and duplicate_text_cluster_size is 12."
+6. If the MARKET CAUSALITY & MOMENTUM section shows narrative_precedes_price_action = TRUE:
+   - This is definitive cryptographic proof of a coordinated FUD campaign (the panic was manufactured before the market reacted).
+   - You MUST output executable_verdict = "HOLD" or "IGNORE_FUD".
+   - You MUST cite this in the evidence_chain prefixing with [CAUSALITY] and assigning a weight of at least 0.20.
+     Example: "[CAUSALITY] narrative_precedes_price_action is TRUE (lag_minutes is 15.0). Social FUD burst preceded price drop, confirming manufactured panic."
+7. If narrative_precedes_price_action is FALSE:
+   - The social panic is an organic reaction to a real price crash, requiring higher risk caution.
+   - You MAY output "LIQUIDATE_LONGS" or "HOLD" depending on on-chain evidence.
+   - Cite as: "[CAUSALITY] narrative_precedes_price_action is FALSE. Organic reaction to price drop."
+8. If causality data is null/not_called, you MUST NOT make claims about narrative timing.
+
+MARKET CAP CLASSIFICATION — MANDATORY:
+You MUST output a "market_cap_category" field. Use the coin's market cap from COINGECKO MARKETS data if status=ok, otherwise use your best knowledge.
+- "meme"  : market cap < $10M  OR coin is a memecoin/dog coin/frog coin with no fundamental utility
+- "low"   : market cap $10M–$500M
+- "mid"   : market cap $500M–$10B
+- "big"   : market cap > $10B  (BTC, ETH, BNB, SOL-tier assets)
 
 Output a JSON object:
 {
@@ -245,12 +312,13 @@ Output a JSON object:
   "branch_probabilities": {"<branch>": <0-1>},
   "evidence_chain": [
     {
-      "evidence": "[SOURCE_NAME] Grounded claim text... (You MUST prefix every claim's evidence string with the matching source name in brackets, e.g. '[BYBIT] Bybit order book shows...'. The source name must be one of: BYBIT, COINGECKO, DEXSCREENER, GOPLUS, RUGCHECK, TWITTER, TELEGRAM, DEFILLAMA, SYBIL, SECURITY)",
+      "evidence": "[SOURCE_NAME] Grounded claim text... (You MUST prefix every claim's evidence string with the matching source name in brackets, e.g. '[BYBIT] Bybit order book shows...'. The source name must be one of: BYBIT, COINGECKO, DEXSCREENER, GOPLUS, RUGCHECK, TWITTER, TELEGRAM, DEFILLAMA, SYBIL, SECURITY, CAUSALITY, MOMENTUM)",
       "weight": <fractional contribution 0.0 to 1.0, representing how heavily that specific piece of evidence influenced the final decision>
     }
   ],
   "executable_verdict": "<LIQUIDATE_LONGS|HOLD|ACCUMULATE|IGNORE_FUD>",
   "confidence": <0-1>,
+  "market_cap_category": "<meme|low|mid|big>",
   "critic_notes": "<explanation of key decisions>"
 }`;
 
@@ -260,11 +328,26 @@ const CONCLUSION_FORCED_SUFFIX = `\n\nCONCLUSION FORCED: You MUST now output the
 // Safe JSON parser
 // ─────────────────────────────────────────────────────────────
 
-function safeParseJSON(raw: string): Record<string, unknown> | null {
+function safeParseJSON(raw: string): any {
   try {
     const cleaned = raw.trim().replace(/^```(?:json)?\s*/i, '').replace(/\s*```\s*$/, '');
     return JSON.parse(cleaned);
   } catch {
+    // Fallback: search backwards for a candidate JSON block starting with '{' (HIGH-04)
+    let idx = raw.lastIndexOf('{');
+    while (idx >= 0) {
+      const candidate = raw.slice(idx).trim().replace(/\s*```\s*$/, '');
+      try {
+        const parsed = JSON.parse(candidate);
+        if (parsed && typeof parsed === 'object') {
+          return parsed;
+        }
+      } catch {
+        // Continue searching backwards
+      }
+      idx = raw.lastIndexOf('{', idx - 1);
+    }
+
     const match = raw.match(/\{[\s\S]*\}/);
     if (match) {
       try {
@@ -323,6 +406,19 @@ function buildContextPrompt(context: PipelineContext): string {
   parts.push(`\n=== COORDINATION & SYBIL SIGNALS ===`);
   parts.push(JSON.stringify(context.coordinationSignals, null, 2));
 
+  parts.push(`\n=== MARKET CAUSALITY & MOMENTUM ===`);
+  if (!context.momentumResult && !context.causalityResult) {
+    parts.push('Not enough data (cold start or metrics unavailable).');
+  } else {
+    const momentumInfo = context.momentumResult
+      ? JSON.stringify(context.momentumResult, null, 2)
+      : 'Price/sentiment velocity metrics: unavailable (requires at least 2 queries in a 3-hour window).';
+    const causalityInfo = context.causalityResult
+      ? JSON.stringify(context.causalityResult, null, 2)
+      : 'Causality analysis (social panic lead-lag timing): unavailable (no Bybit kline data or social timestamps found).';
+    parts.push(`Momentum Info:\n${momentumInfo}\n\nCausality Info:\n${causalityInfo}`);
+  }
+
   return parts.join('\n');
 }
 
@@ -341,6 +437,8 @@ const SOURCE_KEYWORDS: Record<string, string[]> = {
   coingecko: ['coingecko', 'gecko market', 'cg price'],
   defillama: ['defillama', 'tvl protocol', 'total value locked'],
   sybil: ['sybil', 'bot manipulation', 'unique_author_ratio', 'duplicate_text_cluster_size', 'coordination_signals'],
+  momentum: ['price_velocity', 'sentiment_velocity', 'momentum'],
+  causality: ['narrative_precedes_price_action', 'lag_minutes', 'social_burst', 'price_drop', 'causality'],
 };
 
 export function groundEvidenceChain(
@@ -370,6 +468,8 @@ export function groundEvidenceChain(
       else if (sourceName === 'rugcheck') mappedSource = 'rugcheck';
       else if (sourceName === 'defillama') mappedSource = 'defillama';
       else if (sourceName === 'sybil') mappedSource = 'sybil';
+      else if (sourceName === 'momentum') mappedSource = 'momentum';
+      else if (sourceName === 'causality') mappedSource = 'causality';
 
       if (sourceStatuses[mappedSource] !== undefined) {
         if (sourceStatuses[mappedSource] !== 'ok') {
@@ -598,11 +698,7 @@ async function runMultiStepMCTS(
 
   const hypothesesParsed = safeParseJSON(hypothesesResult.content);
   const hypotheses: Array<{ id: string; name: string; description: string; initial_probability: number }> =
-    (hypothesesParsed?.hypotheses as any) || [
-      { id: 'H1', name: 'FUD False', description: 'Claims are exaggerated or fabricated.', initial_probability: 0.5 },
-      { id: 'H2', name: 'FUD True', description: 'Claims reflect real risks.', initial_probability: 0.3 },
-      { id: 'H3', name: 'Manipulation', description: 'Coordinated market manipulation.', initial_probability: 0.2 },
-    ];
+    (hypothesesParsed?.hypotheses as any) || buildFallbackHypotheses(context);
 
   console.log(`🌳 [MCTS Step 1] Generated ${hypotheses.length} hypotheses:`, hypotheses.map(h => h.name));
 
@@ -728,7 +824,16 @@ async function runMultiStepMCTS(
       timestamp: new Date().toISOString(),
     });
     const synthParsed = safeParseJSON(synthResult.content);
-    if (synthParsed) return buildVerdict(synthParsed, context.sourceStatuses, logger, context.coordinationSignals);
+    if (synthParsed) {
+      // CRITICAL-04 fix: if LLM returned FETCH_MORE *again* after CONCLUSION_FORCED,
+      // refuse to build a verdict from it. buildVerdict() would produce a silently
+      // corrupt result (IGNORE_FUD with drama_index=0) that looks like a real analysis.
+      if ((synthParsed as any).action === 'FETCH_MORE') {
+        console.error('[MCTS] LLM returned FETCH_MORE again after CONCLUSION_FORCED suffix — refusing to build corrupt verdict. Returning degraded.');
+        return makeDegradedVerdict('reflexion_critic_refused_conclusion_after_fetch_more', logger);
+      }
+      return buildVerdict(synthParsed, context.sourceStatuses, logger, context.coordinationSignals);
+    }
   }
 
   const totalMctsMs = Date.now() - mctsStart;
@@ -787,6 +892,19 @@ export function buildVerdict(
   // Apply grounding check — drop evidence citing unavailable sources
   const groundedEvidence = groundEvidenceChain(normalizedEvidence, sourceStatuses);
 
+  // Normalise market_cap_category — accept only valid literals, default to null (HIGH-06)
+  const VALID_MC_CATEGORIES = new Set(['meme', 'low', 'mid', 'big']);
+  const MC_CAT_SYNONYMS: Record<string, 'meme' | 'low' | 'mid' | 'big'> = {
+    large: 'big', huge: 'big', mega: 'big', giant: 'big',
+    small: 'low', micro: 'meme', nano: 'meme', tiny: 'meme',
+    medium: 'mid', moderate: 'mid',
+  };
+  const rawMcCat = String(parsed.market_cap_category ?? '').toLowerCase().trim();
+  const normalizedMcCat = MC_CAT_SYNONYMS[rawMcCat] ?? rawMcCat;
+  const market_cap_category: VerdictResult['market_cap_category'] = VALID_MC_CATEGORIES.has(normalizedMcCat)
+    ? (normalizedMcCat as 'meme' | 'low' | 'mid' | 'big')
+    : null;
+
   const partialVerdict = {
     drama_index,
     chatter_level,
@@ -795,7 +913,10 @@ export function buildVerdict(
     branch_probabilities: (parsed.branch_probabilities as Record<string, number>) || {},
     evidence_chain: groundedEvidence,
     executable_verdict,
-    confidence: typeof parsed.confidence === 'number' ? parsed.confidence : null,
+    confidence: typeof parsed.confidence === 'number'
+      ? Math.max(0, Math.min(1, parsed.confidence))
+      : null,
+    market_cap_category,
   };
 
   // Apply extreme verdict gate
@@ -828,7 +949,11 @@ interface IngestionBundle {
   defillamaProtocols: IngestionResult<DefiLlamaData>;
 }
 
-function buildSourceStatuses(bundle: IngestionBundle): Record<string, IngestionStatus> {
+function buildSourceStatuses(
+  bundle: IngestionBundle,
+  momentumResult: MomentumResult | null,
+  causalityResult: CausalityResult | null
+): Record<string, IngestionStatus> {
   return {
     bybit: bundle.orderBook.status === 'ok' || bundle.perpData.status === 'ok' ? 'ok' : bundle.orderBook.status,
     dexscreener: bundle.dexData.status,
@@ -839,6 +964,8 @@ function buildSourceStatuses(bundle: IngestionBundle): Record<string, IngestionS
     coingecko: bundle.coingeckoMarkets.status === 'ok' ? 'ok' : bundle.coingeckoMacro.status,
     defillama: bundle.defillamaProtocols.status,
     sybil: 'ok',
+    momentum: momentumResult ? 'ok' : 'not_called',
+    causality: causalityResult ? 'ok' : 'not_called',
   };
 }
 
@@ -894,6 +1021,7 @@ export async function executeFudAnalysis(
     evidence_chain: [{ evidence: 'Pipeline encountered a fatal error.', weight: 0.0 }],
     executable_verdict: 'INSUFFICIENT_DATA',
     confidence: null,
+    market_cap_category: null,
     served_from_cache: false,
     fallback: true,
     reason: 'pipeline_fatal_error',
@@ -903,6 +1031,7 @@ export async function executeFudAnalysis(
       cross_platform_burst_window_minutes: 0,
     },
   };
+
 
   try {
     // ── STEP 0: Granular Dispatcher ─────────────────────────
@@ -1079,14 +1208,30 @@ export async function executeFudAnalysis(
       }).join('\n'),
     ].join('\n');
 
+    const lwStart = Date.now();
     const fudClaimsRaw = await runLightweightEngine(
       LIGHTWEIGHT_SYSTEM_PROMPT,
       `Extract FUD claims from the following social data:\n\n${socialRaw}`
     );
+    const lwElapsed = Date.now() - lwStart;
+
+    // Log the lightweight engine call (LOW-05)
+    logger.log({
+      step_name: 'fud_claim_extraction',
+      model: process.env.OPENROUTER_API_KEY ? 'nvidia/nemotron-3-nano-omni-30b-a3b-reasoning:free' : 'gemini-2.5-flash',
+      input_tokens: Math.ceil((LIGHTWEIGHT_SYSTEM_PROMPT.length + socialRaw.length) / 4),
+      output_tokens: Math.ceil(fudClaimsRaw.length / 4),
+      execution_time_ms: lwElapsed,
+      timestamp: new Date().toISOString(),
+    });
 
     let fudClaims: string[] = [];
     const parsedClaims = safeParseJSON(fudClaimsRaw);
-    if (Array.isArray(parsedClaims)) {
+    if (parsedClaims && !Array.isArray(parsedClaims) && (('fallback' in parsedClaims) || ('error' in parsedClaims))) {
+      // Guard: if lightweight engine failed and returned fallback/error object, ignore it (HIGH-05)
+      console.warn('[Pipeline] Lightweight engine returned fallback/error object — ignoring as claims list');
+      fudClaims = [];
+    } else if (Array.isArray(parsedClaims)) {
       fudClaims = parsedClaims as string[];
     } else if (typeof fudClaimsRaw === 'string' && fudClaimsRaw.trim().startsWith('[')) {
       try {
@@ -1098,13 +1243,44 @@ export async function executeFudAnalysis(
 
     console.log('🧠 [STEP B] Noise Filter output array length:', fudClaims.length);
 
+    // ── STEP B.2: Temporal Momentum & Lead-Lag Causality ─────
+    const currentPriceUsd = parseFloat(metrics.priceUsd) || 0;
+    
+    // Fire-and-forget push snapshot
+    void pushMomentumSnapshot(coinSymbol, currentPriceUsd, combinedPosts.length).catch(err => {
+      console.warn('[Pipeline] pushMomentumSnapshot failed:', err);
+    });
+
+    const [momentumResult, causalityResult] = await Promise.all([
+      computeMomentum(coinSymbol).catch(err => {
+        console.warn('[Pipeline] computeMomentum failed:', err);
+        return null;
+      }),
+      computeCausality(coinSymbol, combinedPosts).catch(err => {
+        console.warn('[Pipeline] computeCausality failed:', err);
+        return null;
+      }),
+    ]);
+
+    if (momentumResult) {
+      console.log(`[Pipeline] Calculated momentum: price velocity = ${momentumResult.price_velocity_pct_per_min.toFixed(4)} %/m, sentiment velocity = ${momentumResult.sentiment_velocity_posts_per_min.toFixed(4)} posts/m`);
+    } else {
+      console.log('[Pipeline] Momentum result unavailable (cold start)');
+    }
+
+    if (causalityResult) {
+      console.log(`[Pipeline] Calculated causality: narrative precedes price action = ${causalityResult.narrative_precedes_price_action}, lag = ${causalityResult.lag_minutes.toFixed(2)}m`);
+    } else {
+      console.log('[Pipeline] Causality result unavailable (no Bybit kline data or social posts)');
+    }
+
     // ── Build source statuses map ────────────────────────────
     const contextBase = {
       orderBook, perpData, dexData, securityGoPlus, securityRugCheck,
       twitterIntel, telegramIntel, coingeckoMarkets, coingeckoMacro,
       defillamaProtocols,
     };
-    const sourceStatuses = buildSourceStatuses(contextBase);
+    const sourceStatuses = buildSourceStatuses(contextBase, momentumResult, causalityResult);
 
     console.log('📡 [Pipeline] Source statuses:', JSON.stringify(sourceStatuses));
 
@@ -1117,6 +1293,8 @@ export async function executeFudAnalysis(
       fudClaims,
       sourceStatuses,
       coordinationSignals,
+      momentumResult,
+      causalityResult,
     };
 
     // ── STEP C-G: Multi-Step MCTS ────────────────────────────
@@ -1130,6 +1308,36 @@ export async function executeFudAnalysis(
     }
 
     console.log(`[Pipeline] Analysis complete. Verdict: ${verdict.executable_verdict}, Drama Index: ${verdict.drama_index}`);
+
+    // ── P2: Calibration — fire-and-forget record + calibrate confidence ──
+    // Only record when we have a meaningful price and valid market cap category.
+    const initialPriceForRecord = parseFloat(metrics.priceUsd) || 0;
+    if (
+      initialPriceForRecord > 0 &&
+      verdict.market_cap_category !== null &&
+      verdict.confidence !== null &&
+      verdict.executable_verdict !== 'INSUFFICIENT_DATA'
+    ) {
+      const clampedConf = Math.max(0, Math.min(1, verdict.confidence));
+      // Fire-and-forget: never block the response on this
+      void recordPrediction(
+        coinSymbol,
+        verdict.executable_verdict,
+        initialPriceForRecord,
+        clampedConf,
+        verdict.market_cap_category
+      ).catch(err => {
+        console.warn('[Pipeline] recordPrediction failed (non-fatal):', err);
+      });
+    }
+
+    // Apply calibrated confidence — replaces raw LLM confidence once ≥50 samples exist
+    const calibratedConfidence = await getCalibratedConfidence(verdict.confidence).catch(err => {
+      console.warn('[Pipeline] getCalibratedConfidence failed (non-fatal), using raw:', err);
+      return verdict.confidence;
+    });
+    verdict = { ...verdict, confidence: calibratedConfidence };
+
     return verdict;
 
   } catch (error) {
