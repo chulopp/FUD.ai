@@ -1,26 +1,137 @@
 @import "tailwindcss";
 
+@custom-variant dark (&:where(.dark, .dark *));
+
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
+  --background: #fafafa;
+  --foreground: #0a0a0a;
+  --surface: #ffffff;
+  --surface-2: #f4f4f5;
+  --border: rgba(0, 0, 0, 0.08);
+  --border-strong: rgba(0, 0, 0, 0.14);
+  --muted: #71717a;
+  --muted-foreground: #52525b;
+
+  --verdict-bull: #00b864;
+  --verdict-bear: #e11d2a;
+  --verdict-neutral: #d97706;
+  --verdict-bull-glow: rgba(0, 184, 100, 0.15);
+  --verdict-bear-glow: rgba(225, 29, 42, 0.15);
+
+  --accent: #00b864;
+  --accent-soft: rgba(0, 184, 100, 0.1);
+
+  --dot-color: rgba(0, 0, 0, 0.08);
+  --terminal-bg: #0b0e13;
+  --terminal-text: #4ade80;
+}
+
+.dark {
+  --background: #05060a;
+  --foreground: #ededed;
+  --surface: #0d0f14;
+  --surface-2: #161922;
+  --border: rgba(255, 255, 255, 0.08);
+  --border-strong: rgba(255, 255, 255, 0.16);
+  --muted: #a1a1aa;
+  --muted-foreground: #d4d4d8;
+
+  --verdict-bull: #22ff88;
+  --verdict-bear: #ff2d4a;
+  --verdict-neutral: #f5a524;
+  --verdict-bull-glow: rgba(34, 255, 136, 0.18);
+  --verdict-bear-glow: rgba(255, 45, 74, 0.18);
+
+  --accent: #22ff88;
+  --accent-soft: rgba(34, 255, 136, 0.12);
+
+  --dot-color: rgba(255, 255, 255, 0.07);
+  --terminal-bg: #04060a;
+  --terminal-text: #22ff88;
 }
 
 @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);
+  --color-surface: var(--surface);
+  --color-surface-2: var(--surface-2);
+  --color-border: var(--border);
+  --color-border-strong: var(--border-strong);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+
+  --color-verdict-bull: var(--verdict-bull);
+  --color-verdict-bear: var(--verdict-bear);
+  --color-verdict-neutral: var(--verdict-neutral);
+
+  --color-accent: var(--accent);
+  --color-accent-soft: var(--accent-soft);
+
   --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
+  --font-mono: var(--font-jetbrains-mono);
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
+* {
+  border-color: var(--border);
+}
+
+html {
+  scroll-behavior: smooth;
+  -webkit-font-smoothing: antialiased;
 }
 
 body {
   background: var(--background);
   color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  font-family: var(--font-geist-sans), Arial, Helvetica, sans-serif;
+  transition: background-color 0.2s ease, color 0.2s ease;
+}
+
+::selection {
+  background: var(--verdict-bull-glow);
+  color: var(--foreground);
+}
+
+.bg-dotmatrix {
+  background-image: radial-gradient(var(--dot-color) 1px, transparent 1px);
+  background-size: 22px 22px;
+  background-position: 0 0;
+  -webkit-mask-image: radial-gradient(ellipse 80% 70% at 50% 40%, black 35%, transparent 80%);
+  mask-image: radial-gradient(ellipse 80% 70% at 50% 40%, black 35%, transparent 80%);
+}
+
+.bg-dotmatrix-dense {
+  background-image: radial-gradient(var(--dot-color) 1px, transparent 1px);
+  background-size: 16px 16px;
+}
+
+.glow-bull {
+  box-shadow: 0 0 0 1px var(--verdict-bull), 0 0 32px var(--verdict-bull-glow);
+}
+
+.glow-bear {
+  box-shadow: 0 0 0 1px var(--verdict-bear), 0 0 32px var(--verdict-bear-glow);
+}
+
+.text-gradient {
+  background: linear-gradient(120deg, var(--foreground) 30%, var(--accent) 110%);
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+}
+
+.terminal-scroll::-webkit-scrollbar {
+  width: 6px;
+}
+.terminal-scroll::-webkit-scrollbar-thumb {
+  background: rgba(74, 222, 128, 0.25);
+  border-radius: 3px;
+}
+
+@keyframes blink {
+  0%, 49% { opacity: 1; }
+  50%, 100% { opacity: 0; }
+}
+.cursor-blink {
+  animation: blink 1s step-end infinite;
 }
