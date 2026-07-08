@@ -6,9 +6,12 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "eslint"
+    "lint": "eslint",
+    "croo:worker": "tsx scripts/croo-provider-worker.ts",
+    "croo:worker:prod": "node --import tsx/esm scripts/croo-provider-worker.ts"
   },
   "dependencies": {
+    "@croo-network/sdk": "^0.1.0",
     "@modelcontextprotocol/sdk": "^1.29.0",
     "@upstash/redis": "^1.38.0",
     "agent-twitter-client": "^0.0.18",

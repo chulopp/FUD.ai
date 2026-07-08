@@ -2,11 +2,8 @@ import { NextRequest, NextResponse } from 'next/server';
 import { executeFudAnalysis } from '../../lib/mcts/pipeline';
 import { createJob, updateJob } from '../../lib/redis/job-store';
 import { redis } from '../../lib/redis/client';
+import { acquirePipelineSlot, releasePipelineSlot } from '../../lib/redis/concurrency';
 import crypto from 'crypto';
-
-// Concurrency limiter configuration
-const MAX_CONCURRENT_PIPELINES = 5;
-const ACTIVE_COUNT_KEY = 'pipeline:active_count';
 
 // ─────────────────────────────────────────────────────────────
 // POST /api/agent
@@ -39,23 +36,15 @@ export async function POST(req: NextRequest) {
     }
 
     // Concurrency Limiter: check active pipelines (MEDIUM-10)
-    try {
-      const activeCount = await redis.incr(ACTIVE_COUNT_KEY);
+    // Uses the shared limiter module so CROO worker + HTTP route share the same counter.
+    const slotAcquired = await acquirePipelineSlot();
+    if (slotAcquired) {
       incremented = true;
-      // Auto-expire in 2 minutes so stale counts (e.g. from crashed servers) clean up
-      await redis.expire(ACTIVE_COUNT_KEY, 120);
-
-      if (activeCount > MAX_CONCURRENT_PIPELINES) {
-        await redis.decr(ACTIVE_COUNT_KEY);
-        incremented = false;
-        return NextResponse.json(
-          { error: 'Too many concurrent analyses in progress. Please retry in a moment.' },
-          { status: 429 }
-        );
-      }
-    } catch (err) {
-      // Redis issues shouldn't block client requests entirely, but warn.
-      console.warn('[API Route] Concurrency limiter check failed (non-blocking):', err);
+    } else {
+      return NextResponse.json(
+        { error: 'Too many concurrent analyses in progress. Please retry in a moment.' },
+        { status: 429 }
+      );
     }
 
     // Generate unique job ID
@@ -117,9 +106,7 @@ export async function POST(req: NextRequest) {
         });
       } finally {
         if (incremented) {
-          await redis.decr(ACTIVE_COUNT_KEY).catch(err => {
-            console.warn('[API Route] Failed to decrement active count:', err);
-          });
+          await releasePipelineSlot();
         }
       }
     })();
@@ -155,7 +142,7 @@ export async function POST(req: NextRequest) {
     console.error('[API Route] Fatal error in POST /api/agent:', error);
     // Cleanup if incremented
     if (incremented) {
-      await redis.decr(ACTIVE_COUNT_KEY).catch(() => {});
+      await releasePipelineSlot();
     }
     return NextResponse.json(
       { error: 'Internal server error', status: 'degraded' },
