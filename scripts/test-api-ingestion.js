@@ -16,7 +16,7 @@ const path = require('path');
 // 0. Environment loader (reuses .env.local without "dotenv" dep)
 // ─────────────────────────────────────────────────────────────
 function loadEnv() {
-  const envPath = path.join(__dirname, '.env.local');
+  const envPath = path.join(__dirname, '../.env.local');
   if (!fs.existsSync(envPath)) {
     console.warn('⚠️ .env.local not found! Using existing environment variables.');
     return;

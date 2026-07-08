@@ -1,4 +1,4 @@
-import { computeCoordinationSignals, type SocialPost } from './app/lib/ingestion/sybil_detector';
+import { computeCoordinationSignals, type SocialPost } from '../app/lib/ingestion/sybil_detector';
 
 // Scenario 1: High Sybil / Coordinated Bot Network
 // 20 posts with low unique author count (3 authors) and near-identical copy-paste texts.

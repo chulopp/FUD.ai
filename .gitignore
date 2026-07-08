@@ -49,3 +49,24 @@ CLAUDE.md
 testsprite_tests/tmp/
 ngrok.log
 
+# Ad-hoc test result artifacts (ephemeral outputs)
+*.result.json
+test-*.json
+test-*.png
+test-*.jpg
+
+# Python cache (dari testsprite_tests)
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+
+# General log files
+*.log
+
+# OS generated files
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+
+

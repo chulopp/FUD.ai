@@ -274,7 +274,7 @@ function calculateDeepSeekCost() {
 // ==========================================
 // STEP 3: DEFINE SCENARIOS & RUNNER
 // ==========================================
-import { executeFudAnalysis } from './app/lib/mcts/pipeline';
+import { executeFudAnalysis } from '../app/lib/mcts/pipeline';
 
 const scenarios = [
   {

@@ -1,11 +1,11 @@
 process.env.UPSTASH_REDIS_REST_URL = "https://dummy-redis.upstash.io";
 process.env.UPSTASH_REDIS_REST_TOKEN = "dummy_token";
 
-import { filterSpamPosts, SpammablePost } from './app/lib/ingestion/spam_filter';
-import { buildVerdict, groundEvidenceChain, EvidenceItem } from './app/lib/mcts/pipeline';
-import { IngestionStatus } from './app/lib/ingestion/types';
-import { PipelineStepLogger } from './app/lib/mcts/step_logger';
-import { CoordinationSignals } from './app/lib/ingestion/sybil_detector';
+import { filterSpamPosts, SpammablePost } from '../app/lib/ingestion/spam_filter';
+import { buildVerdict, groundEvidenceChain, EvidenceItem } from '../app/lib/mcts/pipeline';
+import { IngestionStatus } from '../app/lib/ingestion/types';
+import { PipelineStepLogger } from '../app/lib/mcts/step_logger';
+import { CoordinationSignals } from '../app/lib/ingestion/sybil_detector';
 
 console.log("==================================================");
 console.log("P0 FINAL INTELLIGENCE UPGRADES: VALIDATION SCRIPT");

@@ -3,7 +3,7 @@ const path = require('path');
 
 // Load environment variables from .env.local
 function loadEnv() {
-  const envPath = path.join(__dirname, '.env.local');
+  const envPath = path.join(__dirname, '../.env.local');
   if (!fs.existsSync(envPath)) {
     console.warn("⚠️ .env.local not found! Using existing environment variables.");
     return;

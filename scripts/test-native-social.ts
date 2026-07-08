@@ -8,8 +8,8 @@
  * Run with:  npx tsx test-native-social.ts
  */
 
-import { scrapeTelegramChannel, DEFAULT_TELEGRAM_CHANNELS } from './app/lib/ingestion/telegram';
-import { searchTwitterRapidAPI as searchTwitterSentiment } from './app/lib/ingestion/rapidapi_twitter';
+import { scrapeTelegramChannel, DEFAULT_TELEGRAM_CHANNELS } from '../app/lib/ingestion/telegram';
+import { searchTwitterRapidAPI as searchTwitterSentiment } from '../app/lib/ingestion/rapidapi_twitter';
 
 const line = '━'.repeat(80);
 function banner(title: string) {

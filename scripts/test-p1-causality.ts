@@ -1,8 +1,8 @@
 process.env.UPSTASH_REDIS_REST_URL = "https://dummy-redis.upstash.io";
 process.env.UPSTASH_REDIS_REST_TOKEN = "dummy_token";
 
-import { computeCausalityMetrics } from './app/lib/ingestion/causality';
-import { type SocialPost } from './app/lib/ingestion/sybil_detector';
+import { computeCausalityMetrics } from '../app/lib/ingestion/causality';
+import { type SocialPost } from '../app/lib/ingestion/sybil_detector';
 
 console.log("==================================================");
 console.log("P1 TEMPORAL MOMENTUM & LEAD-LAG CAUSALITY MATH VALIDATION");

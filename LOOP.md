@@ -291,7 +291,7 @@ Furthermore, the LLM Free Tier latency (OpenRouter / Gemini) issues are currentl
 
 ---
 
-## Phase 8 — CRITICAL-04 & Sybil / Prompt Injection End-to-End Verification (TestSprite MCP)
+## Phase 8 — CRITICAL-04 & Sybil / Prompt Injection End-to-End Verification (TestSprite CLI)
 **Date**: 2026-07-08  
 **Objective**: Verify the fix for infinite `FETCH_MORE` loops (The Maze) and end-to-end Sybil/Prompt Injection detection using mocked data (The Trojan Horse).
 
