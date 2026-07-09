@@ -1,50 +1,82 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { executeFudAnalysis } from '../../lib/mcts/pipeline';
-import { createJob, updateJob } from '../../lib/redis/job-store';
+import { createJob } from '../../lib/redis/job-store';
+import { enqueueDemoJob } from '../../lib/redis/job-store';
 import { redis } from '../../lib/redis/client';
-import { acquirePipelineSlot, releasePipelineSlot } from '../../lib/redis/concurrency';
 import crypto from 'crypto';
 
 // ─────────────────────────────────────────────────────────────
 // POST /api/agent
 //
-// Async Polling Pattern (Option A — waitUntil)
+// Queue Producer Pattern (Option B — Redis Queue)
 //
 // 1. Validates input.
-// 2. Checks active pipeline concurrency counter.
+// 2. Checks demo fingerprint + rate limits.
 // 3. Generates a unique job_id.
-// 4. Writes { status: 'pending' } to Redis.
-// 5. Returns HTTP 202 Accepted immediately with job_id + poll_url.
-// 6. Uses waitUntil() to keep the function alive while the MCTS
-//    pipeline runs in the background, updating Redis when done.
+// 4. Writes { status: 'pending' } to Redis job record.
+// 5. LPUSH job to fud:demo:queue (Render worker will RPOP and execute).
+// 6. Returns HTTP 202 Accepted immediately with job_id + poll_url.
+//    (Total Vercel function time: ~100-300ms)
 //
+// The heavy pipeline runs in the Render worker (croo-provider-worker.ts).
 // Poll the result via:  GET /api/agent/<job_id>
 // ─────────────────────────────────────────────────────────────
 
+// Rate limiting constants
+const DEMO_WEEKLY_LIMIT = process.env.NODE_ENV === 'development' ? 9999 : 2;
+const FINGERPRINT_RATE_KEY_PREFIX = 'demo:fp:';
+
 export async function POST(req: NextRequest) {
-  let incremented = false;
   try {
     const body = await req.json().catch(() => ({}));
     const { coin_symbol, contract_address, chain_id, request_id } = body;
 
     // Validate required fields
-    if (!coin_symbol) {
+    if (!coin_symbol || typeof coin_symbol !== 'string') {
       return NextResponse.json(
         { error: 'Missing required parameter: coin_symbol is required.' },
         { status: 400 }
       );
     }
 
-    // Concurrency Limiter: check active pipelines (MEDIUM-10)
-    // Uses the shared limiter module so CROO worker + HTTP route share the same counter.
-    const slotAcquired = await acquirePipelineSlot();
-    if (slotAcquired) {
-      incremented = true;
-    } else {
+    const sym = coin_symbol.trim().toUpperCase();
+    if (sym.length === 0 || sym.length > 20 || !/^[A-Za-z0-9]+$/.test(sym)) {
       return NextResponse.json(
-        { error: 'Too many concurrent analyses in progress. Please retry in a moment.' },
-        { status: 429 }
+        { error: 'Invalid coin_symbol: must be 1-20 alphanumeric characters.' },
+        { status: 400 }
       );
+    }
+
+    // Demo fingerprint rate limiting (server-side guard)
+    const fingerprint = req.headers.get('X-Demo-Fingerprint');
+    if (fingerprint) {
+      const fpKey = `${FINGERPRINT_RATE_KEY_PREFIX}${fingerprint}`;
+      try {
+        const currentCount = await redis.get<number>(fpKey) ?? 0;
+        if (currentCount >= DEMO_WEEKLY_LIMIT) {
+          return NextResponse.json(
+            { error: `Demo limit reached (${DEMO_WEEKLY_LIMIT}/week). Integrate via CROO Agent Store for full access.` },
+            { status: 403 }
+          );
+        }
+        // Increment with 7-day TTL (604800s)
+        await redis.set(fpKey, currentCount + 1, { ex: 604800 });
+      } catch {
+        // Redis rate-limit check failure — allow through (don't block demo)
+        console.warn('[API Route] Redis rate-limit check failed, allowing through');
+      }
+    }
+
+    // Check global concurrency — reject if too many in-flight jobs in queue
+    try {
+      const queueLen = await redis.llen('fud:demo:queue');
+      if (queueLen >= 3) {
+        return NextResponse.json(
+          { error: 'Too many concurrent analyses in progress. Please retry in a moment.' },
+          { status: 429 }
+        );
+      }
+    } catch {
+      // Redis queue check failure — allow through
     }
 
     // Generate unique job ID
@@ -52,98 +84,34 @@ export async function POST(req: NextRequest) {
     const resolvedRequestId = request_id || crypto.randomUUID();
 
     // Write pending job to Redis
-    await createJob(job_id, coin_symbol);
+    await createJob(job_id, sym);
 
-    console.log(`[API Route] Job ${job_id} created for ${coin_symbol}. Returning 202.`);
+    // Enqueue to demo worker queue (Render worker will pick this up)
+    await enqueueDemoJob({
+      jobId: job_id,
+      coinSymbol: sym,
+      contractAddress: contract_address,
+      chainId: chain_id || '1',
+      enqueuedAt: new Date().toISOString(),
+    });
 
-    // ── waitUntil: keep the serverless function alive for the background pipeline ──
-    // NextRequest.waitUntil() is supported in Next.js App Router (Node + Edge).
-    // If running on a plain Node.js server, this schedules the async work
-    // against the process event loop after the response is flushed.
-    const backgroundPipeline = (async () => {
-      const pipelineStart = Date.now();
-      try {
-        // Mark job as running
-        await updateJob(job_id, { status: 'running' });
+    console.log(`[API Route] Job ${job_id} enqueued for ${sym}. Queue length will include this job.`);
 
-        const verdict = await executeFudAnalysis(
-          coin_symbol,
-          contract_address,
-          chain_id || '1'
-        );
-
-        const elapsed = Date.now() - pipelineStart;
-        console.log(`[API Route] Job ${job_id} completed in ${elapsed}ms. Verdict: ${verdict.executable_verdict}`);
-
-        // Merge final response shape (mirrors the old synchronous response)
-        const finalPayload = {
-          request_id: resolvedRequestId,
-          coin_symbol,
-          status: verdict.status,
-          executable_verdict: verdict.executable_verdict,
-          confidence: verdict.confidence,
-          drama_index: verdict.drama_index,
-          chatter_level: verdict.chatter_level,
-          risk_score: verdict.risk_score,
-          dominant_branch: verdict.dominant_branch,
-          branch_probabilities: verdict.branch_probabilities,
-          evidence_chain: verdict.evidence_chain,
-          served_from_cache: verdict.served_from_cache,
-          fallback: verdict.fallback ?? false,
-          reason: verdict.reason,
-          step_summary: verdict.step_summary,
-          coordination_signals: verdict.coordination_signals,
-          pipeline_elapsed_ms: elapsed,
-        };
-
-        await updateJob(job_id, { status: 'completed', payload: finalPayload as any });
-      } catch (error: any) {
-        const elapsed = Date.now() - pipelineStart;
-        console.error(`[API Route] Job ${job_id} FAILED after ${elapsed}ms:`, error?.message);
-        await updateJob(job_id, {
-          status: 'failed',
-          error: error?.message || 'Unknown pipeline error',
-        });
-      } finally {
-        if (incremented) {
-          await releasePipelineSlot();
-        }
-      }
-    })();
-
-    // Schedule background work — survives the 202 response on Vercel/Edge
-    if (typeof (req as any).waitUntil === 'function') {
-      (req as any).waitUntil(backgroundPipeline);
-    } else {
-      // ⚠️ LOCAL DEV LIMITATION (MEDIUM-09):
-      // On plain Node.js dev server (npm run dev), the background pipeline runs as a
-      // detached Promise that continues after the 202 response is sent. Job state IS
-      // persisted in Redis (Upstash REST), so polling will eventually see 'completed'.
-      // However, if the dev process exits before the pipeline finishes, the job record
-      // in Redis will remain as 'running' permanently (no cleanup). This is intentional
-      // and acceptable for local development. On Vercel, waitUntil() ensures correct
-      // lifecycle management.
-      backgroundPipeline.catch(console.error);
-    }
-
-    // Return 202 immediately
+    // Return 202 immediately — Vercel function completes in ~100-300ms
     return NextResponse.json(
       {
         job_id,
         status: 'pending',
-        coin_symbol,
+        coin_symbol: sym,
         poll_url: `/api/agent/${job_id}`,
         message: 'Analysis job accepted. Poll poll_url for results.',
+        request_id: resolvedRequestId,
       },
       { status: 202 }
     );
 
   } catch (error) {
     console.error('[API Route] Fatal error in POST /api/agent:', error);
-    // Cleanup if incremented
-    if (incremented) {
-      await releasePipelineSlot();
-    }
     return NextResponse.json(
       { error: 'Internal server error', status: 'degraded' },
       { status: 500 }

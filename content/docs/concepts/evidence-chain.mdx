@@ -1,0 +1,96 @@
+---
+title: Evidence Chain & Coordination Signals
+description: How to read the evidence chain and interpret coordination metrics — FUD.ai's core differentiator.
+---
+
+## Evidence chain
+
+The `evidence_chain` field is an array of human-readable strings, each prefixed with a category tag that indicates the data source:
+
+| Prefix | Source | What it detects |
+|---|---|---|
+| `[SECURITY]` | GoPlus, RugCheck | Honeypot, mint authority, hidden owner, tax manipulation |
+| `[SYBIL]` | Coordination module | Bot networks, duplicate text clusters, burst windows |
+| `[ON-CHAIN]` | DexScreener, Bybit | Liquidity changes, order book walls, exchange flows |
+| `[SOCIAL]` | Twitter, Telegram | Sentiment shifts, mention volume, influencer activity |
+| `[MARKET]` | CoinGecko, DefiLlama | Price momentum, market cap tier, TVL changes |
+
+### Reading evidence
+
+Each evidence string is self-contained and human-readable. Your agent can log them for audit trails or display them to end users.
+
+```
+[SECURITY] No honeypot detected, contract source is verified
+[SYBIL] unique_author_ratio: 0.15 — highly coordinated bot campaign detected
+[ON-CHAIN] 45M $PEPE transferred to Binance in last 24h
+[SOCIAL] Mention volume up 320% in 2-hour window
+[MARKET] Price down 15% with high volatility, market cap: low-cap meme
+```
+
+### Weight transparency
+
+In the internal pipeline, each evidence item carries a weight (0.0-1.0) that contributes to the final verdict. However, the CROO deliverable schema strips weights for on-chain compatibility — only the string statements are delivered.
+
+If you need weighted evidence for custom reasoning, contact us about an extended API tier.
+
+## Coordination signals — the core differentiator
+
+Most sentiment tools aggregate scores. FUD.ai goes further by computing **explicit coordination metrics** that distinguish organic fear from manufactured campaigns.
+
+### unique_author_ratio
+
+```
+unique_author_ratio = unique_authors / total_posts
+```
+
+| Range | Interpretation |
+|---|---|
+| **0.0 - 0.3** | Highly coordinated — a small group of accounts generating most of the noise. Likely a botnet or paid campaign. |
+| **0.3 - 0.6** | Moderate coordination — some amplification but with genuine participation. |
+| **0.6 - 1.0** | Organic — many independent authors discussing independently. Real community sentiment. |
+
+### duplicate_text_cluster_size
+
+Measures the largest cluster of near-duplicate posts using Jaccard similarity clustering.
+
+| Range | Interpretation |
+|---|---|
+| **0 - 2** | Low duplication — posts are mostly original content |
+| **3 - 5** | Moderate — some copy-paste behavior, could be organic echo |
+| **6+** | High duplication — likely coordinated copy-paste bot campaign |
+
+### cross_platform_burst_window_minutes
+
+Measures the time window in which the largest duplicate cluster was posted across platforms (Twitter + Telegram).
+
+| Range | Interpretation |
+|---|---|
+| **0 - 10 min** | Synchronized burst — posts appeared almost simultaneously, strong coordination signal |
+| **10 - 60 min** | Short window — possible coordination but could be organic virality |
+| **60+ min** | Spread organically — posts appeared over an extended period, likely genuine |
+
+## Putting it together
+
+A verdict with these coordination signals:
+
+```json
+{
+  "unique_author_ratio": 0.15,
+  "duplicate_text_cluster_size": 47,
+  "cross_platform_burst_window_minutes": 4
+}
+```
+
+...paints a clear picture: **15% unique authors**, **47 near-duplicate posts**, posted within a **4-minute window**. This is almost certainly a coordinated FUD campaign, not organic market fear. Your agent can confidently `ACCUMULATE` or `IGNORE_FUD`.
+
+Contrast with:
+
+```json
+{
+  "unique_author_ratio": 0.82,
+  "duplicate_text_cluster_size": 2,
+  "cross_platform_burst_window_minutes": 180
+}
+```
+
+...**82% unique authors**, **2 duplicate posts**, spread over **3 hours**. This is organic community discussion — the fear is real and your agent should treat the verdict accordingly.

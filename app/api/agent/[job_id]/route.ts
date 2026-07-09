@@ -37,11 +37,40 @@ export async function GET(_req: NextRequest, context: RouteContext) {
     }
 
     if (record.status === 'completed' && record.payload) {
+      const rawEvidence = record.payload.evidence_chain || [];
+      const evidenceStrings = Array.isArray(rawEvidence)
+        ? rawEvidence.map((item: any) => {
+            if (typeof item === 'string') return item;
+            if (item && typeof item === 'object' && 'evidence' in item) {
+              return String(item.evidence);
+            }
+            return String(item);
+          })
+        : [];
+
+      // Ensure dominant_branch is mathematically synchronized to the highest probability branch
+      let dominant_branch = String(record.payload.dominant_branch || 'unknown');
+      const probs = record.payload.branch_probabilities || {};
+      let maxKey = '';
+      let maxVal = -1;
+      for (const [k, v] of Object.entries(probs)) {
+        const val = Number(v);
+        if (val > maxVal) {
+          maxVal = val;
+          maxKey = k;
+        }
+      }
+      if (maxKey && maxVal > 0) {
+        dominant_branch = maxKey;
+      }
+
       return NextResponse.json(
         {
           job_id,
           coin_symbol: record.coin_symbol,
           ...record.payload,
+          dominant_branch,
+          evidence_chain: evidenceStrings,
           status: 'completed' as const,
         },
         { status: 200 }

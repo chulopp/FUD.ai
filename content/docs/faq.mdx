@@ -1,0 +1,77 @@
+---
+title: FAQ
+description: Common questions about FUD.ai, CROO integration, async patterns, and more.
+---
+
+## Why is the API async instead of synchronous?
+
+FUD.ai's pipeline involves fetching data from 8+ external providers (GoPlus, RugCheck, DexScreener, Bybit, Twitter, Telegram, CoinGecko, DefiLlama), running coordination analysis, and executing MCTS reasoning branches. The full pipeline can take up to **150 seconds (2.5 minutes)**.
+
+A synchronous response would timeout on most infrastructure. The async pattern (202 + polling) ensures reliability — see [Async Job Pattern](/docs/concepts/async-job) for details.
+
+## Why do I need a CROO wallet?
+
+FUD.ai is a **CROO CAP agent** — it's designed to be called by other agents, not by humans directly. CROO CAP handles:
+
+- Agent identity and authentication
+- USDC payment escrow on Base
+- On-chain settlement when a verdict is delivered
+- Auto-refund if the pipeline fails
+
+You don't need a CROO wallet for the live demo (2 calls/week), but production access requires one.
+
+## What does INSUFFICIENT_DATA mean?
+
+`INSUFFICIENT_DATA` means the pipeline ran in **degraded mode** — some data sources were unavailable (e.g., Twitter API rate-limited, RugCheck timeout). The verdict is delivered with an explanation rather than failing silently.
+
+**Do not trade on `INSUFFICIENT_DATA` verdicts.** They mean the analysis is incomplete, not that the situation is safe or dangerous.
+
+## What chains are supported?
+
+FUD.ai currently supports:
+
+- **Ethereum** (chain_id: `1`) — full analysis
+- **BSC** (chain_id: `56`) — full analysis
+- **Base** (chain_id: `8453`) — full analysis
+- **Solana** — partial analysis via RugCheck (no GoPlus)
+
+For Solana tokens, pass the token mint address as `contract_address` and use chain_id `solana`.
+
+## Can I use FUD.ai without CROO?
+
+For the live demo, yes — just use the landing page (2 calls/week, no auth). For production, FUD.ai is exclusively available through CROO CAP. We don't offer direct API keys or subscriptions.
+
+## How accurate is the verdict?
+
+The `confidence` field (0.0-1.0) tells you how confident the pipeline is. The **reflexion loop** continuously calibrates this based on historical prediction accuracy. Confidence is typically:
+
+- **0.7-0.9** for well-known tokens with active social discussion
+- **0.4-0.7** for low-cap or new tokens with limited data
+- **0.0** when the pipeline is degraded
+
+## What's the difference between ACCUMULATE and IGNORE_FUD?
+
+Both are "bullish" signals, but they differ in conviction:
+
+- **ACCUMULATE**: FUD is false and the price is likely to recover. Your agent should consider buying.
+- **IGNORE_FUD**: The noise is not actionable — it's neither a real crash nor a buying opportunity. Your agent should hold and do nothing.
+
+## How fast does the pipeline run?
+
+Typical execution times:
+
+| Scenario | Time |
+|---|---|
+| Cached result (recent analysis of same coin) | < 2 seconds |
+| Fresh analysis, high-liquidity token | 15-30 seconds |
+| Fresh analysis, low-cap token | 30-90 seconds |
+| Degraded mode (some sources down) | 20-60 seconds |
+| **Maximum pipeline execution time** | **150 seconds (2.5 minutes)** |
+
+## Is FUD.ai open source?
+
+Yes. The FUD.ai codebase is open source. Check the [GitHub repository](https://github.com/chulopp/FUD.ai) for the full source, including the MCTS pipeline, ingestion layer, and coordination detection modules.
+
+## Still have questions?
+
+Join our community or reach out via the [CROO Agent Store](https://agent.croo.network) listing.

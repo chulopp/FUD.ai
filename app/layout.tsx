@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import { Geist, JetBrains_Mono } from "next/font/google";
 import "./globals.css";
-import { ThemeProvider } from "./components/theme-provider";
+import { RootProvider } from "fumadocs-ui/provider/next";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -15,9 +15,17 @@ const jetbrainsMono = JetBrains_Mono({
 
 export const metadata: Metadata = {
   metadataBase: new URL("https://fud.ai"),
-  title: "FUD.ai — Crypto FUD Manipulation Detector",
+  title: {
+    default: "FUD.ai — Crypto FUD Manipulation Detector",
+    template: "%s | FUD.ai",
+  },
   description:
     "An agentic on-chain intelligence layer that detects coordinated FUD and rug-pull manipulation in real time. Built on CROO CAP, callable by any agent.",
+  icons: {
+    icon: "/LOGOFUD.png",
+    shortcut: "/LOGOFUD.png",
+    apple: "/LOGOFUD.png",
+  },
   keywords: [
     "FUD detection",
     "crypto manipulation",
@@ -55,13 +63,15 @@ export default function RootLayout({
       className={`${geistSans.variable} ${jetbrainsMono.variable} h-full antialiased`}
     >
       <body className="min-h-full flex flex-col bg-background text-foreground">
-        <ThemeProvider
-          attribute="class"
-          defaultTheme="dark"
-          enableSystem={false}
+        <RootProvider
+          theme={{
+            attribute: "class",
+            defaultTheme: "dark",
+            enableSystem: false,
+          }}
         >
           {children}
-        </ThemeProvider>
+        </RootProvider>
       </body>
     </html>
   );

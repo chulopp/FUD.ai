@@ -910,12 +910,27 @@ export function buildVerdict(
     ? (normalizedMcCat as 'meme' | 'low' | 'mid' | 'big')
     : null;
 
+  let dominant_branch = String(parsed.dominant_branch || 'unknown');
+  const branch_probabilities = (parsed.branch_probabilities as Record<string, number>) || {};
+  let maxKey = '';
+  let maxVal = -1;
+  for (const [k, v] of Object.entries(branch_probabilities)) {
+    const val = Number(v);
+    if (val > maxVal) {
+      maxVal = val;
+      maxKey = k;
+    }
+  }
+  if (maxKey && maxVal > 0) {
+    dominant_branch = maxKey;
+  }
+
   const partialVerdict = {
     drama_index,
     chatter_level,
     risk_score,
-    dominant_branch: String(parsed.dominant_branch || 'unknown'),
-    branch_probabilities: (parsed.branch_probabilities as Record<string, number>) || {},
+    dominant_branch,
+    branch_probabilities,
     evidence_chain: groundedEvidence,
     executable_verdict,
     confidence: typeof parsed.confidence === 'number'

@@ -4,9 +4,9 @@ import { useEffect, useRef, useState } from "react";
 
 export function useTypewriter(
   lines: string[],
-  opts: { speed?: number; lineDelay?: number; fastForward?: boolean } = {},
+  opts: { speed?: number; lineDelay?: number; fastForward?: boolean; resetKey?: number } = {},
 ) {
-  const { speed = 22, lineDelay = 320, fastForward = false } = opts;
+  const { speed = 40, lineDelay = 10000, fastForward = false, resetKey = 0 } = opts;
   const [rendered, setRendered] = useState<string[]>([""]);
   const [done, setDone] = useState(false);
   const rafRef = useRef<number | null>(null);
@@ -71,7 +71,7 @@ export function useTypewriter(
     return () => {
       if (rafRef.current) cancelAnimationFrame(rafRef.current);
     };
-  }, [lines.join("\n"), speed, lineDelay, fastForward]);
+  }, [lines.join("\n"), speed, lineDelay, fastForward, resetKey]);
 
   return { rendered, done };
 }

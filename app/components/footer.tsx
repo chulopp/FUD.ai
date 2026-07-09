@@ -14,8 +14,21 @@ function GithubIcon({ className }: { className?: string }) {
   );
 }
 
+function XIcon({ className }: { className?: string }) {
+  return (
+    <svg
+      className={className}
+      viewBox="0 0 24 24"
+      fill="currentColor"
+      aria-hidden="true"
+    >
+      <path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-5.214-6.817L4.99 21.75H1.68l7.73-8.835L1.254 2.25H8.08l4.713 6.231zm-1.161 17.52h1.833L7.084 4.126H5.117z" />
+    </svg>
+  );
+}
+
 const CROO_LISTING = "https://agent.croo.network";
-const GITHUB_URL = "https://github.com/fud-ai";
+const GITHUB_URL = "https://github.com/chulopp/FUD.ai";
 
 const links = [
   {
@@ -46,11 +59,11 @@ export function Footer() {
               <Image
                 src="/LOGOFUD.svg"
                 alt="FUD.ai logo"
-                width={32}
-                height={32}
-                className="h-8 w-8"
+                width={40}
+                height={40}
+                className="h-10 w-10 shrink-0"
               />
-              <span className="text-lg font-bold tracking-tight">
+              <span className="text-xl font-bold tracking-tight">
                 FUD<span className="text-verdict-bull">.ai</span>
               </span>
             </div>
@@ -90,6 +103,15 @@ export function Footer() {
             </p>
             <div className="mt-4 flex gap-2.5">
               <a
+                href="https://x.com/fuddulu"
+                target="_blank"
+                rel="noopener noreferrer"
+                aria-label="X (Twitter)"
+                className="inline-flex h-9 w-9 items-center justify-center rounded-lg border border-border text-muted-foreground transition-colors hover:text-foreground hover:border-border-strong"
+              >
+                <XIcon className="h-4 w-4" />
+              </a>
+              <a
                 href={GITHUB_URL}
                 target="_blank"
                 rel="noopener noreferrer"
@@ -112,7 +134,7 @@ export function Footer() {
         <div className="mt-12 flex flex-col items-start justify-between gap-3 border-t border-border pt-6 text-xs text-muted-foreground sm:flex-row sm:items-center">
           <p>© {new Date().getFullYear()} FUD.ai. Open source under MIT.</p>
           <p className="font-mono">
-            Built for CROO · settlement on Base
+            Built on CROO CAP • settlement on Base
           </p>
         </div>
       </div>

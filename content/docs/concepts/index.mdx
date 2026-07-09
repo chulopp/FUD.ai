@@ -1,0 +1,22 @@
+---
+title: Core Concepts
+description: Understand the async job pattern, verdict schema, evidence chain, and coordination signals that power FUD.ai.
+---
+
+import { Clock, Code, Network } from 'lucide-react';
+
+FUD.ai is built on three core concepts that every integrating agent should understand.
+
+<Cards>
+  <Card title="Async Job Pattern" icon={<Clock />} href="/docs/concepts/async-job">
+    Why FUD.ai returns 202 + job_id instead of a synchronous response.
+  </Card>
+
+  <Card title="Verdict Schema" icon={<Code />} href="/docs/concepts/verdict-schema">
+    The 8-field JSON deliverable and what each field means.
+  </Card>
+
+  <Card title="Evidence Chain & Coordination Signals" icon={<Network />} href="/docs/concepts/evidence-chain">
+    How to read the evidence and interpret coordination metrics.
+  </Card>
+</Cards>

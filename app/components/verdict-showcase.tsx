@@ -18,6 +18,7 @@ const ResponsiveContainer = dynamic(
   () => import("recharts").then((m) => m.ResponsiveContainer),
   { ssr: false },
 );
+const Tooltip = dynamic(() => import("recharts").then((m) => m.Tooltip), { ssr: false });
 
 export interface Verdict {
   executable_verdict:
@@ -81,6 +82,29 @@ export function VerdictShowcase({
 }) {
   const tone = verdictTone[verdict.executable_verdict];
 
+  const verdictColor = useMemo(() => {
+    switch (verdict.executable_verdict) {
+      case "ACCUMULATE":
+      case "IGNORE_FUD":
+        return "#10b981"; // emerald/green
+      case "HOLD":
+        return "#f59e0b"; // amber/orange
+      case "LIQUIDATE_LONGS":
+        return "#f43f5e"; // rose/red
+      default:
+        return "#71717a"; // zinc/gray
+    }
+  }, [verdict.executable_verdict]);
+
+  const isDominantBranch = (branchName: string) => {
+    if (!verdict.dominant_branch) return false;
+    const cleanBranch = branchName.toLowerCase().trim();
+    const cleanDominant = verdict.dominant_branch.toLowerCase().trim();
+    return cleanBranch === cleanDominant 
+      || cleanBranch.includes(cleanDominant) 
+      || cleanDominant.includes(cleanBranch);
+  };
+
   const branchData = useMemo(
     () =>
       Object.entries(verdict.branch_probabilities || {}).map(([k, v]) => ({
@@ -132,8 +156,9 @@ export function VerdictShowcase({
             </div>
             <div className="mt-2 h-2 w-full overflow-hidden rounded-full bg-surface-2">
               <div
-                className="h-full rounded-full bg-verdict-bull transition-all duration-700"
+                className="h-full rounded-full transition-all duration-700"
                 style={{
+                  backgroundColor: verdictColor,
                   width:
                     verdict.confidence === null
                       ? "0%"
@@ -170,25 +195,47 @@ export function VerdictShowcase({
           {branchData.length > 0 && (
             <div className="mt-5 h-44">
               <ResponsiveContainer width="100%" height="100%">
-                <BarChart data={branchData} margin={{ top: 8, right: 8, bottom: 4, left: -20 }}>
-                  <XAxis
-                    dataKey="name"
-                    tick={{ fontSize: 10, fill: "var(--muted)" }}
-                    axisLine={false}
-                    tickLine={false}
-                  />
-                  <YAxis
-                    domain={[0, 100]}
-                    tick={{ fontSize: 10, fill: "var(--muted)" }}
-                    axisLine={false}
-                    tickLine={false}
-                  />
-                  <Bar dataKey="value" radius={[4, 4, 0, 0]}>
-                    {branchData.map((d) => (
-                      <Cell key={d.fullName} fill={branchColor(d.fullName)} />
-                    ))}
-                  </Bar>
-                </BarChart>
+                  <BarChart data={branchData} margin={{ top: 8, right: 8, bottom: 4, left: -20 }}>
+                    <XAxis
+                      dataKey="name"
+                      tick={{ fontSize: 10, fill: "var(--muted)" }}
+                      axisLine={false}
+                      tickLine={false}
+                    />
+                    <YAxis
+                      domain={[0, 100]}
+                      tick={{ fontSize: 10, fill: "var(--muted)" }}
+                      axisLine={false}
+                      tickLine={false}
+                    />
+                    <Tooltip
+                      formatter={(value: any) => [`${value}%`, "Probability"]}
+                      labelFormatter={(label: any, items: any) => {
+                        const item = items[0]?.payload;
+                        return item ? item.fullName : label;
+                      }}
+                      contentStyle={{
+                        backgroundColor: "#18181b",
+                        borderColor: "#27272a",
+                        borderRadius: "8px",
+                        fontSize: "12px",
+                        color: "#ffffff",
+                      }}
+                      itemStyle={{ color: "#ffffff" }}
+                      labelStyle={{ color: "#ffffff", fontWeight: "600" }}
+                    />
+                    <Bar dataKey="value" radius={[4, 4, 0, 0]}>
+                      {branchData.map((d) => {
+                        const isDom = isDominantBranch(d.fullName);
+                        return (
+                          <Cell 
+                            key={d.fullName} 
+                            fill={isDom ? verdictColor : "#52525b"} 
+                          />
+                        );
+                      })}
+                    </Bar>
+                  </BarChart>
               </ResponsiveContainer>
             </div>
           )}

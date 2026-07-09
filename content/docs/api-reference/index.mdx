@@ -1,0 +1,35 @@
+---
+title: API Reference
+description: Detailed endpoint specifications, parameters, request/response examples, and error codes.
+---
+
+import { ArrowUp, ArrowDown } from 'lucide-react';
+
+FUD.ai exposes two endpoints for the async job pattern.
+
+<Cards>
+  <Card title="POST /api/agent" icon={<ArrowUp />} href="/docs/api-reference/post-agent">
+    Submit a new analysis request. Returns 202 with a job_id.
+  </Card>
+
+  <Card title="GET /api/agent/{job_id}" icon={<ArrowDown />} href="/docs/api-reference/get-agent">
+    Poll for the status and result of an analysis job.
+  </Card>
+</Cards>
+
+## Base URL
+
+```
+https://fud.ai/api/agent
+```
+
+For the live demo on the landing page, the same endpoints are used with client-side rate limiting (2 calls per week per device).
+
+## Authentication
+
+- **Live demo**: No authentication required. Rate-limited to 2 calls per week per device fingerprint.
+- **Production (via CROO CAP)**: Authentication and payment settlement are handled by the CROO CAP protocol. No API key needed directly — CROO manages agent identity and USDC escrow.
+
+## Content type
+
+All requests and responses use `application/json`.

@@ -1,0 +1,54 @@
+---
+title: Introduction
+description: FUD.ai is an agentic on-chain intelligence layer that detects coordinated FUD and rug-pull manipulation in real time.
+---
+
+import { Rocket, Lightbulb, Code, CircleHelp } from 'lucide-react';
+
+<YouTube id="dQw4w9WgXcQ" title="FUD.ai demo" />
+
+## What is FUD.ai?
+
+FUD.ai is an **agentic intelligence layer** designed specifically for the crypto market. It detects coordinated FUD campaigns, rug-pull manipulation, and sybil-driven sentiment attacks before they impact your positions.
+
+Unlike general AI tools that analyze stale data, FUD.ai fuses **on-chain evidence**, **social signals**, and **coordination detection** in real time, then reasons across multiple scenarios using an MCTS-inspired loop to deliver an executable verdict.
+
+## Why do agents need FUD.ai?
+
+If you're building a crypto trading bot, portfolio manager, or any agent that touches token markets, you need to know:
+
+- Is this price drop driven by **real fundamentals** or **coordinated manipulation**?
+- Are the social signals **organic fear** or a **sybil botnet** amplifying panic?
+- Should your agent **accumulate**, **liquidate**, or **ignore** the FUD?
+
+FUD.ai answers all three questions in a single API call, returning a structured verdict that any downstream agent can act on programmatically.
+
+## Key capabilities
+
+- **Multidimensional ingestion** — on-chain contract data (GoPlus, RugCheck, DexScreener), social signals (Twitter, Telegram), and market data (Bybit order book) cross-validated in real time
+- **Coordination & sybil detection** — explicit metrics: unique author ratio, duplicate-text clustering, cross-platform burst windows
+- **MCTS-inspired reasoning** — three parallel scenarios (Real Crash / False FUD / Whale Manipulation) scored against evidence
+- **Reflexion loop** — learns from past incorrect predictions, recalibrates confidence automatically
+- **Agent-to-agent native** — callable via CROO CAP protocol, settled on-chain in USDC
+
+## Quick navigation
+
+<Cards>
+  <Card title="Quickstart" icon={<Rocket />} href="/docs/quickstart">
+    From zero to your first verdict call in 15 minutes.
+  </Card>
+
+  <Card title="Core Concepts" icon={<Lightbulb />} href="/docs/concepts">
+    Understand the async job pattern, verdict schema, and evidence chain.
+  </Card>
+
+  <Card title="API Reference" icon={<Code />} href="/docs/api-reference">
+    Detailed endpoint specs, parameters, and response schemas.
+  </Card>
+
+  <Card title="FAQ" icon={<CircleHelp />} href="/docs/faq">
+    Common questions about FUD.ai, CROO, and integration.
+  </Card>
+</Cards>
+
+Ready to integrate? Head to the [Quickstart](/docs/quickstart) →

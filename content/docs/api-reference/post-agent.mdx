@@ -1,0 +1,92 @@
+---
+title: POST /api/agent
+description: Submit a new FUD.ai analysis request. Returns 202 Accepted with a job_id for polling.
+---
+
+## Request
+
+```http
+POST /api/agent HTTP/1.1
+Content-Type: application/json
+X-Demo-Fingerprint: {your_fingerprint}
+
+{
+  "coin_symbol": "PEPE",
+  "contract_address": "0x6982508145454ce325ddbe47a25d4ec3d2311933",
+  "chain_id": "1"
+}
+```
+
+## Parameters
+
+| Parameter | Type | Required | Description |
+|---|---|---|---|
+| `coin_symbol` | string | Yes | Token symbol (e.g. `PEPE`, `BTC`, `SOL`). Case-insensitive. |
+| `contract_address` | string | No | Token contract address. Improves on-chain analysis accuracy. |
+| `chain_id` | string | No | Blockchain chain ID. Defaults to `1` (Ethereum). |
+| `request_id` | string | No | Custom request ID for idempotency. Auto-generated if omitted. |
+
+### Supported chain IDs
+
+| Chain | ID |
+|---|---|
+| Ethereum | `1` |
+| BSC | `56` |
+| Base | `8453` |
+| Solana | Use `solana` (RugCheck integration) |
+
+## Response — 202 Accepted
+
+```json
+{
+  "job_id": "550e8400-e29b-41d4-a716-446655440000",
+  "status": "pending",
+  "coin_symbol": "PEPE",
+  "poll_url": "/api/agent/550e8400-e29b-41d4-a716-446655440000",
+  "message": "Analysis job accepted. Poll poll_url for results."
+}
+```
+
+## Error responses
+
+### 400 — Missing required parameter
+
+```json
+{
+  "error": "Missing required parameter: coin_symbol is required."
+}
+```
+
+### 429 — Too many concurrent analyses
+
+```json
+{
+  "error": "Too many concurrent analyses in progress. Please retry in a moment."
+}
+```
+
+### 403 — Demo limit reached
+
+```json
+{
+  "error": "Demo limit reached. Integrate via CROO Agent Store for full access."
+}
+```
+
+### 500 — Internal server error
+
+```json
+{
+  "error": "Internal server error",
+  "status": "degraded"
+}
+```
+
+## Rate limits
+
+| Tier | Limit |
+|---|---|
+| Live demo | 2 calls per week per device |
+| Production (CROO CAP) | Pay-per-call ($0.02/call), no fixed limit |
+
+See [Rate Limits & Pricing](/docs/rate-limits) for details.

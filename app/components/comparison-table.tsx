@@ -3,39 +3,39 @@ import { Check, X } from "lucide-react";
 const rows = [
   {
     criterion: "Focus",
-    general: "AI umum — crypto cuma salah satu topik dari ribuan.",
-    aggregator: "Agregasi skor sentimen sosial mentah.",
-    fud: "Spesialis deteksi manipulasi & rugpull. Epistemic reasoning multi-cabang.",
+    general: "General-purpose AI. Crypto sentiment is one of thousands of topics. No specialization in FUD detection or market manipulation.",
+    aggregator: "Aggregates raw social sentiment scores. No distinction between organic fear and manufactured FUD.",
+    fud: "Built exclusively for crypto sentiment analysis — detects FUD, whale manipulation, and coordinated attacks using multi-branch reasoning.",
   },
   {
-    criterion: "Deteksi koordinasi / sybil",
-    general: "Tidak ada.",
-    aggregator: "Umumnya tidak eksplisit.",
-    fud: "Modul eksplisit: author ratio, account age, duplicate-text clustering, burst windows.",
+    criterion: "Cost per analysis",
+    general: "~$0.10–$0.30 per query via API, plus latency from general-purpose models.",
+    aggregator: "Subscription tiers from $24 to $240+ per month depending on limits, regardless of usage volume.",
+    fud: "Flat rate via CROO Agent Store. Pay only when you query, not for idle months.",
   },
   {
-    criterion: "Grounding on-chain",
-    general: "Tidak punya akses on-chain.",
-    aggregator: "Terbatas / tidak konsisten.",
-    fud: "Cross-validated dengan RugCheck, GoPlus, DexScreener, order book real-time.",
+    criterion: "Coordination & Sybil Detection",
+    general: "Not publicly documented. General LLMs have no out-of-the-box mechanism to detect coordinated bot waves.",
+    aggregator: "Not publicly documented. Social scores are susceptible to undetected bot inflation.",
+    fud: "Explicit detection — measures unique author ratio, near-duplicate text clustering, and cross-platform burst windows to flag coordinated attacks.",
+  },
+  {
+    criterion: "On-chain Cross-validation",
+    general: "No on-chain access whatsoever. Analysis is based on training data, not live market state.",
+    aggregator: "Limited. Social scores are not validated against actual on-chain money flows.",
+    fud: "Sentiment is cross-validated against real-time on-chain state — divergence between social volume and market signals is explicitly flagged, not silently ignored.",
   },
   {
     criterion: "Self-correction",
-    general: "Tidak ada memori antar-query.",
-    aggregator: "Tidak ada.",
-    fud: "Reflexion Loop — belajar dari prediksi salah, kalibrasi confidence otomatis.",
+    general: "No memory between queries. Makes the same analytical errors repeatedly.",
+    aggregator: "No learning mechanism. Score methodologies are static.",
+    fud: "Reflexion Loop — records each verdict and recalibrates confidence for similar future cases when past predictions are wrong. Gets sharper over time.",
   },
   {
-    criterion: "Model bisnis",
-    general: "Berlangganan / API generik.",
-    aggregator: "Berlangganan.",
-    fud: "Pay-per-call via USDC lewat CROO CAP. Agent lain bisa hire sebagai dependency.",
-  },
-  {
-    criterion: "Akses agent-to-agent",
-    general: "Tidak native.",
-    aggregator: "Tidak native.",
-    fud: "Native — callable langsung oleh bot/agent lain, settlement on-chain.",
+    criterion: "Agent-to-agent access",
+    general: "Not native. Requires manual API integration per use case.",
+    aggregator: "Not native.",
+    fud: "Native — directly callable by other bots and AI agents via CROO Network, with on-chain settlement per use.",
   },
 ];
 
@@ -51,8 +51,7 @@ export function ComparisonTable() {
             FUD.ai vs everyone else
           </h2>
           <p className="mt-4 text-muted-foreground sm:text-lg">
-            A side-by-side view across the criteria that actually matter when the market
-            turns.
+            Six criteria that determine whether a sentiment tool can actually protect you from getting rekt.
           </p>
         </div>
 
@@ -91,7 +90,15 @@ export function ComparisonTable() {
                   <td className="bg-verdict-bull/[0.04] px-6 py-4 font-medium text-foreground">
                     <div className="flex gap-2">
                       <Check className="mt-0.5 h-4 w-4 shrink-0 text-verdict-bull" />
-                      <span>{r.fud}</span>
+                      <span>
+                        {r.criterion === "Cost per analysis" ? (
+                          <>
+                            <span className="text-verdict-bull font-semibold">$0.02</span> per query. {r.fud}
+                          </>
+                        ) : (
+                          r.fud
+                        )}
+                      </span>
                     </div>
                   </td>
                 </tr>
@@ -108,7 +115,19 @@ export function ComparisonTable() {
               <div className="mt-4 space-y-3">
                 <MobileRow label="General AI" value={r.general} ok={false} />
                 <MobileRow label="Aggregator" value={r.aggregator} ok={false} />
-                <MobileRow label="FUD.ai" value={r.fud} ok />
+                <MobileRow
+                  label="FUD.ai"
+                  value={
+                    r.criterion === "Cost per analysis" ? (
+                      <span>
+                        <span className="text-verdict-bull font-semibold">$0.02</span> per query. {r.fud}
+                      </span>
+                    ) : (
+                      r.fud
+                    )
+                  }
+                  ok
+                />
               </div>
             </div>
           ))}
@@ -118,7 +137,7 @@ export function ComparisonTable() {
   );
 }
 
-function MobileRow({ label, value, ok }: { label: string; value: string; ok: boolean }) {
+function MobileRow({ label, value, ok }: { label: string; value: React.ReactNode; ok: boolean }) {
   return (
     <div
       className={`rounded-lg border p-3 ${
@@ -137,9 +156,9 @@ function MobileRow({ label, value, ok }: { label: string; value: string; ok: boo
           {label}
         </span>
       </div>
-      <p className={`mt-1.5 text-sm ${ok ? "text-foreground" : "text-muted-foreground"}`}>
+      <div className={`mt-1.5 text-sm ${ok ? "text-foreground" : "text-muted-foreground"}`}>
         {value}
-      </p>
+      </div>
     </div>
   );
 }

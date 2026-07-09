@@ -95,3 +95,44 @@ export async function getJob(jobId: string): Promise<JobRecord | null> {
   }
 }
 
+
+// ─────────────────────────────────────────────────────────────
+// Demo Queue — Vercel enqueues, Render worker dequeues
+// ─────────────────────────────────────────────────────────────
+
+export const DEMO_QUEUE_KEY = 'fud:demo:queue';
+
+export interface DemoQueueItem {
+  jobId: string;
+  coinSymbol: string;
+  contractAddress?: string;
+  chainId?: string;
+  enqueuedAt: string;
+}
+
+/**
+ * Push a demo analysis job onto the Redis list queue.
+ * Called by the Vercel API route immediately after creating the job record.
+ */
+export async function enqueueDemoJob(item: DemoQueueItem): Promise<void> {
+  await redis.lpush(DEMO_QUEUE_KEY, JSON.stringify(item));
+}
+
+/**
+ * Pop the next demo job from the queue (blocking wait, max 5s per poll cycle).
+ * Returns null if the queue was empty during the poll window.
+ * Called by the Render worker in a polling loop.
+ *
+ * NOTE: Upstash Redis REST API does not support BRPOP blocking.
+ * We emulate it with RPOP + a short sleep inside the worker loop.
+ */
+export async function dequeueDemoJob(): Promise<DemoQueueItem | null> {
+  const raw = await redis.rpop(DEMO_QUEUE_KEY);
+  if (!raw) return null;
+  try {
+    return typeof raw === 'string' ? JSON.parse(raw) : (raw as DemoQueueItem);
+  } catch {
+    console.error('[DemoQueue] Failed to parse queued item:', raw);
+    return null;
+  }
+}

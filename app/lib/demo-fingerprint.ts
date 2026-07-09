@@ -48,4 +48,4 @@ export function incrementDemoUsage(): UsageRecord {
   return updated;
 }
 
-export const DEMO_WEEKLY_LIMIT = 2;
+export const DEMO_WEEKLY_LIMIT = process.env.NODE_ENV === "development" ? 9999 : 2;

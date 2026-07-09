@@ -1,0 +1,103 @@
+---
+title: Verdict Schema
+description: The 8-field JSON deliverable that FUD.ai returns, explained field by field.
+---
+
+FUD.ai returns a structured verdict with exactly 8 fields. This schema is registered on the CROO Dashboard as the Service DeliverableType — any mismatch will cause on-chain settlement to fail.
+
+## Field reference
+
+| Field | Type | Description |
+|---|---|---|
+| `executable_verdict` | enum | Action directive: `ACCUMULATE`, `LIQUIDATE_LONGS`, `HOLD`, `IGNORE_FUD`, `INSUFFICIENT_DATA` |
+| `drama_index` | number | Composite intensity index (0-100). Combines chatter level and risk score. |
+| `confidence` | number | Pipeline confidence in the verdict (0.0-1.0). `0` when degraded. |
+| `dominant_branch` | string | The winning scenario from MCTS analysis (e.g. `false_fud`, `real_crash`). |
+| `evidence_chain` | string[] | Human-readable evidence statements supporting the verdict. |
+| `coordination_signals` | object | Sybil & coordination metrics from social data. |
+| `served_from_cache` | boolean | Whether this result was served from ingestion cache. |
+| `branch_probabilities` | Record&lt;string, number&gt; | Probability distribution across all MCTS branches. |
+
+## executable_verdict
+
+The primary action directive. Your agent should branch on this field.
+
+| Value | Meaning | Color | Action |
+|---|---|---|---|
+| `ACCUMULATE` | FUD is false, price likely to recover | Green | Consider buying |
+| `LIQUIDATE_LONGS` | Real crash detected | Red | Exit long positions |
+| `IGNORE_FUD` | Noise without actionable signal | Green | Hold / ignore |
+| `HOLD` | Insufficient conviction either way | Yellow | Maintain current position |
+| `INSUFFICIENT_DATA` | Pipeline degraded, data incomplete | Gray | Do not act |
+
+## drama_index
+
+A composite score from 0-100 that measures the intensity of the situation:
+
+```
+drama_index = round(0.4 * chatter_level + 0.6 * risk_score)
+```
+
+- **0-39**: Low intensity — normal market noise
+- **40-69**: Moderate — worth monitoring
+- **70-100**: High — significant event in progress
+
+## confidence
+
+How confident the pipeline is in the verdict, from 0.0 to 1.0. This is calibrated by the **reflexion loop** based on historical prediction accuracy for similar market conditions.
+
+- **> 0.7**: High confidence — safe to act on
+- **0.4-0.7**: Moderate — consider additional signals
+- **< 0.4**: Low — treat with caution
+- **0**: Pipeline was degraded, verdict is not usable
+
+## coordination_signals
+
+This is FUD.ai's **core differentiator**. It tells you whether the social panic is organic or manufactured.
+
+| Field | Type | Interpretation |
+|---|---|---|
+| `unique_author_ratio` | number (0-1) | < 0.3 = highly coordinated botnet, > 0.6 = organic |
+| `duplicate_text_cluster_size` | number | > 5 = copy-paste bot campaign, ≤ 2 = low duplication |
+| `cross_platform_burst_window_minutes` | number | < 10 min = synchronized burst, > 60 min = spread organically |
+
+## branch_probabilities
+
+The MCTS engine evaluates three parallel scenarios. The full probability distribution is exposed so your agent can hedge:
+
+```json
+{
+  "real_crash": 0.12,
+  "false_fud": 0.65,
+  "whale_manipulation": 0.23
+}
+```
+
+The `dominant_branch` is simply the key with the highest probability.
+
+## Example verdict
+
+```json
+{
+  "executable_verdict": "ACCUMULATE",
+  "drama_index": 38,
+  "confidence": 0.82,
+  "dominant_branch": "false_fud",
+  "evidence_chain": [
+    "[SECURITY] No honeypot detected, contract is verified",
+    "[SYBIL] unique_author_ratio: 0.71 — organic discussion pattern",
+    "[ON-CHAIN] No abnormal exchange inflows detected"
+  ],
+  "coordination_signals": {
+    "unique_author_ratio": 0.71,
+    "duplicate_text_cluster_size": 2,
+    "cross_platform_burst_window_minutes": 0
+  },
+  "served_from_cache": false,
+  "branch_probabilities": {
+    "real_crash": 0.12,
+    "false_fud": 0.65,
+    "whale_manipulation": 0.23
+  }
+}
+```

@@ -8,17 +8,22 @@
     "start": "next start",
     "lint": "eslint",
     "croo:worker": "tsx scripts/croo-provider-worker.ts",
-    "croo:worker:prod": "node --import tsx/esm scripts/croo-provider-worker.ts"
+    "croo:worker:prod": "node --import tsx/esm scripts/croo-provider-worker.ts",
+    "demo:worker": "tsx scripts/croo-provider-worker.ts"
   },
   "dependencies": {
     "@croo-network/sdk": "^0.1.0",
     "@modelcontextprotocol/sdk": "^1.29.0",
+    "@types/mdx": "^2.0.14",
     "@upstash/redis": "^1.38.0",
     "agent-twitter-client": "^0.0.18",
     "axios": "^1.18.1",
     "cheerio": "^1.2.0",
     "clsx": "^2.1.1",
     "framer-motion": "^12.42.2",
+    "fumadocs-core": "^16.11.1",
+    "fumadocs-mdx": "^15.1.0",
+    "fumadocs-ui": "^16.11.1",
     "lucide-react": "^1.23.0",
     "next": "16.2.10",
     "next-themes": "^0.4.6",

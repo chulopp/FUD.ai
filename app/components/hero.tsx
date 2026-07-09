@@ -2,9 +2,11 @@
 
 import { motion } from "framer-motion";
 import Image from "next/image";
-import { ArrowRight, Play, Network, Code } from "lucide-react";
+import { Play, Network, Code, Bot } from "lucide-react";
 import { LinkButton } from "./ui/button";
 import { NetworkBackground } from "./network-background";
+import { getDemoUsage, DEMO_WEEKLY_LIMIT } from "../lib/demo-fingerprint";
+import { useEffect, useState } from "react";
 
 const CROO_LISTING = "https://agent.croo.network";
 
@@ -65,6 +67,15 @@ function Sparkline() {
 }
 
 export function Hero() {
+  const [hasQuota, setHasQuota] = useState(true);
+
+  useEffect(() => {
+    const usage = getDemoUsage();
+    if (usage.count >= DEMO_WEEKLY_LIMIT) {
+      setHasQuota(false);
+    }
+  }, []);
+
   return (
     <section className="relative isolate overflow-hidden pt-16">
       <div className="bg-dotmatrix pointer-events-none absolute inset-0 -z-10" />
@@ -128,24 +139,26 @@ export function Hero() {
         {/* ── Center content ── */}
         <div className="relative z-10 mx-auto max-w-xl text-center">
           {/* NEW pill badge */}
-          <motion.a
-            href="#live-demo"
-            initial={{ opacity: 0, y: -6 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.5 }}
-            className="group mb-6 inline-flex items-center gap-2 rounded-full border border-border bg-surface/60 px-3 py-1.5 backdrop-blur-md transition-colors hover:border-verdict-bull/40 hover:bg-surface"
-          >
-            <motion.span
-              animate={{ opacity: [1, 0.65, 1] }}
-              transition={{ duration: 2.2, repeat: Infinity, ease: "easeInOut" }}
-              className="rounded-full bg-foreground px-1.5 py-0.5 text-[10px] font-bold tracking-wide text-background"
+          {hasQuota && (
+            <motion.a
+              href="#live-demo"
+              initial={{ opacity: 0, y: -6 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.5 }}
+              className="group mb-6 inline-flex items-center gap-2 rounded-full border border-border bg-surface/60 px-3 py-1.5 backdrop-blur-md transition-colors hover:border-verdict-bull/40 hover:bg-surface"
             >
-              NEW
-            </motion.span>
-            <span className="text-xs text-muted-foreground transition-colors group-hover:text-foreground">
-              Demo quota is now available →
-            </span>
-          </motion.a>
+              <motion.span
+                animate={{ opacity: [1, 0.65, 1] }}
+                transition={{ duration: 2.2, repeat: Infinity, ease: "easeInOut" }}
+                className="rounded-full bg-foreground px-1.5 py-0.5 text-[10px] font-bold tracking-wide text-background"
+              >
+                NEW
+              </motion.span>
+              <span className="text-xs text-muted-foreground transition-colors group-hover:text-foreground">
+                Demo quota is now available →
+              </span>
+            </motion.a>
+          )}
 
           {/* Main heading */}
           <h1 className="text-balance text-4xl font-extrabold leading-[1.1] tracking-tight md:text-5xl lg:text-6xl">
@@ -172,8 +185,8 @@ export function Hero() {
               className="relative overflow-hidden px-5 py-2.5 text-sm"
             >
               <span className="relative z-10 flex items-center gap-2">
+                <Bot className="h-4 w-4" />
                 Hire on CROO Agent Store
-                <ArrowRight className="h-4 w-4" />
               </span>
               <span className="shine-sweep pointer-events-none absolute inset-y-0 -left-[120%] w-1/3 bg-gradient-to-r from-transparent via-white/40 to-transparent dark:via-white/25" />
             </LinkButton>

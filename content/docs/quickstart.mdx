@@ -1,0 +1,124 @@
+---
+title: Quickstart
+description: From zero to your first FUD.ai verdict call in 15 minutes via the CROO CAP protocol.
+---
+
+This guide walks you through integrating FUD.ai as a Requester via the CROO CAP SDK. You'll go from zero to your first verdict call in about 15 minutes.
+
+## Prerequisites
+
+Before you begin, make sure you have:
+
+- A **CROO wallet** with USDC on Base mainnet (for payment settlement)
+- **Node.js 18+** and npm installed
+- The **CROO CAP SDK** installed in your project
+
+## 1. Install the CROO CAP SDK
+
+```bash
+npm install @croo-network/sdk
+```
+
+## 2. Set up your CROO credentials
+
+Create a CROO account at [agent.croo.network](https://agent.croo.network) and obtain your API key.
+
+```bash
+# .env
+CROO_API_URL=https://api.croo.network
+CROO_WS_URL=wss://api.croo.network/ws
+CROO_SDK_KEY=croo_sk_your_api_key_here
+```
+
+## 3. Discover FUD.ai on the Agent Store
+
+Browse the [CROO Agent Store](https://agent.croo.network) and find FUD.ai. Review the service description, pricing (**$0.02 USDC per call**, pay-per-call), and the deliverable schema (8-field verdict JSON).
+
+## 4. Make your first call
+
+FUD.ai follows an **async job pattern**. You submit a request, receive a `job_id`, then poll until the verdict is ready.
+
+### Submit an analysis request
+
+```typescript
+const response = await fetch('https://fud.ai/api/agent', {
+  method: 'POST',
+  headers: {
+    'Content-Type': 'application/json',
+    'X-Demo-Fingerprint': 'your-agent-id',
+  },
+  body: JSON.stringify({
+    coin_symbol: 'PEPE',
+    contract_address: '0x...',  // optional, improves accuracy
+    chain_id: '1',               // optional, defaults to Ethereum
+  }),
+});
+
+const { job_id, poll_url } = await response.json();
+// Response: 202 Accepted with { job_id, status: 'pending', poll_url }
+```
+
+### Poll for the result
+
+```typescript
+let verdict = null;
+while (!verdict) {
+  await new Promise(resolve => setTimeout(resolve, 2500));
+
+  const pollResponse = await fetch(`https://fud.ai/api/agent/${job_id}`);
+  const data = await pollResponse.json();
+
+  if (data.status === 'completed') {
+    verdict = data.payload;
+  } else if (data.status === 'failed') {
+    throw new Error(data.error || 'Analysis failed');
+  }
+  // status can be 'pending', 'running', 'completed', or 'failed'
+}
+
+console.log(verdict.executable_verdict);  // "ACCUMULATE" | "LIQUIDATE_LONGS" | "IGNORE_FUD" | ...
+```
+
+### Full verdict response
+
+```json
+{
+  "executable_verdict": "ACCUMULATE",
+  "drama_index": 38,
+  "confidence": 0.82,
+  "dominant_branch": "false_fud",
+  "evidence_chain": [
+    "[SECURITY] No honeypot detected, contract is verified",
+    "[SYBIL] unique_author_ratio: 0.71 — organic discussion pattern",
+    "[ON-CHAIN] No abnormal exchange inflows detected"
+  ],
+  "coordination_signals": {
+    "unique_author_ratio": 0.71,
+    "duplicate_text_cluster_size": 2,
+    "cross_platform_burst_window_minutes": 0
+  },
+  "served_from_cache": false,
+  "branch_probabilities": {
+    "real_crash": 0.12,
+    "false_fud": 0.65,
+    "whale_manipulation": 0.23
+  }
+}
+```
+
+## 5. Act on the verdict
+
+Your agent can now branch on the `executable_verdict` field:
+
+| Verdict | Action |
+|---|---|
+| `ACCUMULATE` | FUD is false — consider buying the dip |
+| `LIQUIDATE_LONGS` | Real crash detected — exit long positions |
+| `IGNORE_FUD` | Noise without actionable signal — hold |
+| `INSUFFICIENT_DATA` | Pipeline degraded — do not act on this result |
+
+## Next steps
+
+- Learn the [Core Concepts](/docs/concepts) behind the async job pattern and verdict schema
+- Read the full [API Reference](/docs/api-reference) for endpoint details
+- Check [Rate Limits & Pricing](/docs/rate-limits) for production usage

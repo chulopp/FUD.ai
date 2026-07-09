@@ -53,6 +53,8 @@ import { executeFudAnalysis } from '../app/lib/mcts/pipeline';
 import { stripToDeliverableSchema, buildDegradedDeliverable } from '../app/lib/utils/croo-schema';
 import { waitForPipelineSlot, releasePipelineSlot } from '../app/lib/redis/concurrency';
 import { redis } from '../app/lib/redis/client';
+import { dequeueDemoJob, updateJob } from '../app/lib/redis/job-store';
+import type { DemoQueueItem } from '../app/lib/redis/job-store';
 
 // ─────────────────────────────────────────────────────────────
 // Constants
@@ -513,6 +515,114 @@ async function handleOrderPaid(
 }
 
 // ─────────────────────────────────────────────────────────────
+// Demo Queue Handler (Render Worker side)
+//
+// Runs as an independent setInterval loop alongside the CROO
+// WebSocket. Polls Redis every 3s for jobs enqueued by the
+// Vercel /api/agent route. Isolated error handling ensures a
+// single failing job never crashes the whole worker.
+// ─────────────────────────────────────────────────────────────
+
+const DEMO_PIPELINE_TIMEOUT_MS = 240_000; // 4-minute hard cap per job
+const DEMO_QUEUE_POLL_INTERVAL_MS = 3_000; // poll every 3 seconds
+
+/** Tracks demo job IDs currently being processed (prevents duplicate pickup) */
+const inFlightDemoJobs = new Set<string>();
+
+async function processDemoJob(item: DemoQueueItem): Promise<void> {
+  const { jobId, coinSymbol, contractAddress, chainId } = item;
+
+  if (inFlightDemoJobs.has(jobId)) {
+    log('WARN', `[DemoQueue] Job ${jobId} already in-flight — skipping duplicate`);
+    return;
+  }
+  inFlightDemoJobs.add(jobId);
+
+  log('INFO', `[DemoQueue] Processing job ${jobId} for ${coinSymbol}`);
+
+  const start = Date.now();
+  try {
+    // Mark job as running in Redis so the frontend knows analysis started
+    await updateJob(jobId, { status: 'running' });
+
+    // Execute pipeline with a 4-minute hard timeout
+    const verdict = await Promise.race([
+      executeFudAnalysis(coinSymbol, contractAddress, chainId ?? '1'),
+      new Promise<never>((_, reject) =>
+        setTimeout(
+          () => reject(new Error('demo_pipeline_timeout_4min')),
+          DEMO_PIPELINE_TIMEOUT_MS
+        )
+      ),
+    ]);
+
+    const elapsed = Date.now() - start;
+    log('INFO', `[DemoQueue] Job ${jobId} completed in ${elapsed}ms. Verdict: ${verdict.executable_verdict}`);
+
+    // Build the final payload (mirrors the old synchronous response shape)
+    const finalPayload = {
+      coin_symbol: coinSymbol,
+      status: verdict.status,
+      executable_verdict: verdict.executable_verdict,
+      confidence: verdict.confidence,
+      drama_index: verdict.drama_index,
+      chatter_level: verdict.chatter_level,
+      risk_score: verdict.risk_score,
+      dominant_branch: verdict.dominant_branch,
+      branch_probabilities: verdict.branch_probabilities,
+      evidence_chain: verdict.evidence_chain,
+      served_from_cache: verdict.served_from_cache,
+      fallback: verdict.fallback ?? false,
+      reason: verdict.reason,
+      step_summary: verdict.step_summary,
+      coordination_signals: verdict.coordination_signals,
+      pipeline_elapsed_ms: elapsed,
+    };
+
+    await updateJob(jobId, { status: 'completed', payload: finalPayload as any });
+    log('INFO', `[DemoQueue] Job ${jobId} written to Redis as completed`);
+
+  } catch (err: unknown) {
+    const elapsed = Date.now() - start;
+    const errMsg = err instanceof Error ? err.message : String(err);
+    log('ERROR', `[DemoQueue] Job ${jobId} FAILED after ${elapsed}ms: ${errMsg}`);
+    try {
+      await updateJob(jobId, {
+        status: 'failed',
+        error: errMsg.slice(0, 500),
+      });
+    } catch (updateErr) {
+      log('ERROR', `[DemoQueue] Failed to update failed status for job ${jobId}`, updateErr);
+    }
+  } finally {
+    inFlightDemoJobs.delete(jobId);
+  }
+}
+
+function startDemoQueuePoller(): void {
+  log('INFO', `[DemoQueue] Starting demo queue poller (interval: ${DEMO_QUEUE_POLL_INTERVAL_MS}ms)`);
+
+  const poll = async () => {
+    try {
+      const item = await dequeueDemoJob();
+      if (item) {
+        // Fire-and-forget — don't await so the poll interval keeps running
+        processDemoJob(item).catch((err) => {
+          log('ERROR', '[DemoQueue] Unhandled error in processDemoJob', err);
+        });
+      }
+    } catch (err) {
+      // Redis poll failure — log and continue. Never crash the worker.
+      log('WARN', '[DemoQueue] Poll error (will retry)', err);
+    }
+  };
+
+  setInterval(poll, DEMO_QUEUE_POLL_INTERVAL_MS);
+  // Also poll immediately on startup to pick up any jobs queued while worker was down
+  poll();
+}
+
+// ─────────────────────────────────────────────────────────────
 // Worker Startup
 // ─────────────────────────────────────────────────────────────
 
@@ -610,6 +720,12 @@ async function main() {
   });
 
   log('INFO', 'Worker is ready. Waiting for negotiations...');
+
+  // ── Demo Queue Poller (Live Demo on website) ──────────────────
+  // Polls Redis every 3s for jobs submitted by the Vercel /api/agent route.
+  // Runs independently alongside the CROO WebSocket — errors are isolated.
+  startDemoQueuePoller();
+  log('INFO', '[DemoQueue] Poller started — ready to serve website live demo jobs.');
 
   // ── Recovery of missed Paid orders ───────────────────────────
   log('INFO', 'Synchronizing missed paid orders...');

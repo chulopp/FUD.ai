@@ -1,10 +1,8 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import { Search, Terminal, Loader2, AlertTriangle, ArrowRight } from "lucide-react";
+import { Search, Terminal, Loader2, AlertTriangle, ArrowRight, Bot } from "lucide-react";
 import { Button } from "./ui/button";
-import { Badge } from "./ui/badge";
-import { useTypewriter } from "./hooks/use-typewriter";
 import {
   getDemoFingerprint,
   getDemoUsage,
@@ -13,20 +11,70 @@ import {
 } from "../lib/demo-fingerprint";
 import { VerdictShowcase, type Verdict } from "./verdict-showcase";
 
-const TERMINAL_LINES = [
+const ALL_LOG_LINES = [
   "> Scraping Twitter & Telegram signals...",
   "> Scanning smart-contract on-chain vulnerabilities...",
   "> Computing coordination & sybil signals...",
   "> Running MCTS hypothesis branches (A/B/C)...",
   "> Cross-validating social vs on-chain pressure...",
   "> Checking reflexion memory for similar past cases...",
-];
-
-const FILLER_LINES = [
   "> Still verifying evidence chain...",
   "> Re-weighing branch probabilities...",
   "> Awaiting final consensus...",
 ];
+
+// ── Self-contained character-by-character terminal typer ──────────────────
+function useTerminalTyper(runId: number, fastForward: boolean) {
+  const [completedLines, setCompletedLines] = useState<string[]>([]);
+  const [currentTyping, setCurrentTyping] = useState("");
+  const abortRef = useRef(false);
+
+  // Start fresh every time runId changes
+  useEffect(() => {
+    if (runId === 0) return;
+    abortRef.current = false;
+    setCompletedLines([]);
+    setCurrentTyping("");
+
+    let lineIdx = 0;
+
+    function typeNextLine() {
+      if (abortRef.current || lineIdx >= ALL_LOG_LINES.length) return;
+      const line = ALL_LOG_LINES[lineIdx];
+      let charIdx = 0;
+
+      function typeChar() {
+        if (abortRef.current) return;
+        charIdx++;
+        if (charIdx >= line.length) {
+          // Line complete — move to completed list
+          setCurrentTyping("");
+          setCompletedLines((prev) => [...prev, line]);
+          lineIdx++;
+          setTimeout(typeNextLine, 3000);
+        } else {
+          setCurrentTyping(line.slice(0, charIdx));
+          setTimeout(typeChar, 40);
+        }
+      }
+
+      typeChar();
+    }
+
+    typeNextLine();
+    return () => { abortRef.current = true; };
+  }, [runId]);
+
+  // Fast-forward: immediately show all lines when job finishes
+  useEffect(() => {
+    if (!fastForward) return;
+    abortRef.current = true;
+    setCompletedLines(ALL_LOG_LINES);
+    setCurrentTyping("");
+  }, [fastForward]);
+
+  return { completedLines, currentTyping };
+}
 
 type Phase = "idle" | "running" | "done" | "error";
 
@@ -37,14 +85,11 @@ export function LiveDemo() {
   const [usageLeft, setUsageLeft] = useState<number>(DEMO_WEEKLY_LIMIT);
   const [verdict, setVerdict] = useState<Verdict | null>(null);
   const [finalCoin, setFinalCoin] = useState("");
-  const [jobDone, setJobDone] = useState(false);
-  const [extraLines, setExtraLines] = useState<string[]>([]);
+  const [runId, setRunId] = useState(0);
+  const [pipelineDone, setPipelineDone] = useState(false);
   const terminalRef = useRef<HTMLDivElement>(null);
 
-  const { rendered, done } = useTypewriter(
-    [...TERMINAL_LINES, ...extraLines],
-    { fastForward: jobDone },
-  );
+  const { completedLines, currentTyping } = useTerminalTyper(runId, pipelineDone);
 
   useEffect(() => {
     setUsageLeft(Math.max(0, DEMO_WEEKLY_LIMIT - getDemoUsage().count));
@@ -54,42 +99,29 @@ export function LiveDemo() {
     if (terminalRef.current) {
       terminalRef.current.scrollTop = terminalRef.current.scrollHeight;
     }
-  }, [rendered, extraLines]);
+  }, [completedLines, currentTyping]);
 
   const pollJob = useCallback(
     async (jobId: string): Promise<Verdict | null> => {
       const start = Date.now();
-      let fillerIdx = 0;
-      const fillerTimer = setInterval(() => {
-        setExtraLines((prev) => {
-          if (prev.length >= FILLER_LINES.length * 2) return prev;
-          return [...prev, FILLER_LINES[fillerIdx % FILLER_LINES.length]];
-        });
-        fillerIdx += 1;
-      }, 4000);
-
-      try {
-        while (Date.now() - start < 120_000) {
-          await new Promise((r) => setTimeout(r, 1800));
-          try {
-            const res = await fetch(`/api/agent/${jobId}`, {
-              headers: { "X-Demo-Fingerprint": getDemoFingerprint() },
-            });
-            const data = await res.json();
-            if (data.status === "completed" && data.payload) {
-              return data.payload as Verdict;
-            }
-            if (data.status === "failed") {
-              throw new Error(data.error || "Pipeline failed");
-            }
-          } catch (e) {
-            // network blip — keep polling
+      while (Date.now() - start < 300_000) {
+        await new Promise((r) => setTimeout(r, 1800));
+        try {
+          const res = await fetch(`/api/agent/${jobId}`, {
+            headers: { "X-Demo-Fingerprint": getDemoFingerprint() },
+          });
+          const data = await res.json();
+          if (data.status === "completed") {
+            return data as unknown as Verdict;
           }
+          if (data.status === "failed") {
+            throw new Error(data.error || "Pipeline failed");
+          }
+        } catch {
+          // network blip — keep polling
         }
-        return null;
-      } finally {
-        clearInterval(fillerTimer);
       }
+      return null;
     },
     [],
   );
@@ -112,9 +144,9 @@ export function LiveDemo() {
 
       setError(null);
       setVerdict(null);
-      setExtraLines([]);
-      setJobDone(false);
+      setPipelineDone(false);
       setFinalCoin(sym);
+      setRunId(Date.now());
       setPhase("running");
 
       try {
@@ -156,7 +188,6 @@ export function LiveDemo() {
         if (!result) {
           throw new Error("Analysis timed out. Try again in a moment.");
         }
-        setJobDone(true);
         setVerdict(result);
         setPhase("done");
       } catch (err: unknown) {
@@ -170,8 +201,6 @@ export function LiveDemo() {
 
   return (
     <section id="live-demo" className="relative scroll-mt-16 py-24 sm:py-32">
-      <div className="pointer-events-none absolute inset-x-0 top-1/2 -z-10 h-96 -translate-y-1/2 bg-gradient-to-b from-verdict-bull/[0.04] via-transparent to-transparent" />
-
       <div className="mx-auto max-w-5xl px-4 sm:px-6 lg:px-8">
         <div className="text-center">
           <p className="text-sm font-semibold uppercase tracking-widest text-verdict-bull">
@@ -242,9 +271,10 @@ export function LiveDemo() {
                   href="https://agent.croo.network"
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="mt-1 inline-flex items-center gap-1 text-verdict-bull hover:underline"
+                  className="mt-1 inline-flex items-center gap-2 text-verdict-bull hover:underline"
                 >
-                  View on CROO Agent Store <ArrowRight className="h-3 w-3" />
+                  <Bot className="h-3.5 w-3.5" />
+                  Hire on CROO Agent Store
                 </a>
               </div>
             </div>
@@ -270,15 +300,18 @@ export function LiveDemo() {
                 ref={terminalRef}
                 className="terminal-scroll h-72 overflow-y-auto px-4 py-4 font-mono text-sm leading-relaxed text-[var(--terminal-text)]"
               >
-                {rendered.map((line, i) => (
+                {completedLines.map((line, i) => (
                   <div key={i} className="whitespace-pre-wrap">
                     {line}
-                    {i === rendered.length - 1 && !done && (
-                      <span className="cursor-blink ml-0.5">▋</span>
-                    )}
                   </div>
                 ))}
-                {phase === "running" && jobDone === false && done && (
+                {currentTyping && (
+                  <div className="whitespace-pre-wrap">
+                    {currentTyping}
+                    <span className="cursor-blink ml-0.5">▋</span>
+                  </div>
+                )}
+                {!currentTyping && !pipelineDone && completedLines.length >= ALL_LOG_LINES.length && (
                   <div className="text-white/30">
                     <span className="cursor-blink">▋</span>
                   </div>

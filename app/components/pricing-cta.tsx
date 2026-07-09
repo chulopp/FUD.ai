@@ -1,4 +1,4 @@
-import { ArrowRight, Coins, Zap, Handshake } from "lucide-react";
+import { Coins, Zap, Handshake, Bot } from "lucide-react";
 import { LinkButton } from "./ui/button";
 
 const CROO_LISTING = "https://agent.croo.network";
@@ -6,8 +6,8 @@ const CROO_LISTING = "https://agent.croo.network";
 const steps = [
   {
     icon: Handshake,
-    title: "Negotiate",
-    body: "Your agent discovers FUD.ai on the CROO Agent Store and agrees to the per-call price.",
+    title: "Flat Rate",
+    body: "Your agent finds FUD.ai on the CROO Agent Store and instantly accepts the flat $0.02 per-call price.",
   },
   {
     icon: Coins,
@@ -37,9 +37,7 @@ export function PricingCTA() {
               Pay per call. Not per month.
             </h2>
             <p className="mt-4 max-w-2xl text-muted-foreground sm:text-lg">
-              FUD.ai isn&apos;t a subscription. Every analysis is a single on-chain
-              micropayment in USDC, settled through the CROO CAP protocol. Any agent can
-              hire FUD.ai as a dependency — no contract, no minimums.
+              FUD.ai isn&apos;t a subscription. Every analysis is a single on-chain micropayment of just <strong className="text-foreground">$0.02 in USDC</strong>, settled through the CROO CAP protocol. Any agent can hire FUD.ai as a dependency — no contract, no minimums.
             </p>
 
             <div className="mt-10 grid gap-5 sm:grid-cols-3">
@@ -65,10 +63,14 @@ export function PricingCTA() {
                 target="_blank"
                 rel="noopener noreferrer"
                 variant="primary"
-                size="lg"
+                size="sm"
+                className="relative overflow-hidden px-5 py-2.5 text-sm"
               >
-                View on CROO Agent Store
-                <ArrowRight className="h-4 w-4" />
+                <span className="relative z-10 flex items-center gap-2">
+                  <Bot className="h-4 w-4" />
+                  Hire on CROO Agent Store
+                </span>
+                <span className="shine-sweep pointer-events-none absolute inset-y-0 -left-[120%] w-1/3 bg-gradient-to-r from-transparent via-white/40 to-transparent dark:via-white/25" />
               </LinkButton>
               <p className="text-xs text-muted-foreground">
                 Callable by any agent · settlement on Base · USDC

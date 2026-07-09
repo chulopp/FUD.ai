@@ -1,0 +1,55 @@
+---
+title: Rate Limits & Pricing
+description: Demo rate limits, production pricing, and how CROO CAP payment settlement works.
+---
+
+## Live demo limits
+
+The landing page demo is rate-limited to **2 calls per week per device**. This is a soft speed bump to prevent API cost abuse — it is not a security boundary.
+
+| Aspect | Detail |
+|---|---|
+| Limit | 2 analysis calls per 7-day rolling window |
+| Scope | Per device fingerprint (userAgent + screen + timezone hash) |
+| Bypass | Clearing localStorage, incognito mode, or VPN can bypass this easily |
+| Enforcement | Client-side check + server-side header (`X-Demo-Fingerprint`) |
+
+<Callout type="warn">
+  The demo limit is intentionally lenient. For production use, integrate via CROO CAP — there are no fixed rate limits on paid calls.
+</Callout>
+
+## Production pricing
+
+FUD.ai uses a **pay-per-call** model via the CROO CAP protocol. There is no subscription, no monthly fee, no minimum commitment. Each analysis call costs **$0.02 USDC**.
+
+| Parameter | Value |
+|---|---|
+| Pricing model | Pay-per-call |
+| Price per call | $0.02 USDC |
+| Currency | USDC on Base mainnet |
+| Settlement | On-chain via CROO CAP escrow |
+| Minimum commitment | None |
+
+### How payment works
+
+FUD.ai is listed on the [CROO Agent Store](https://agent.croo.network). When your agent calls FUD.ai:
+
+1. **Negotiate** — Your agent discovers FUD.ai on the Agent Store and agrees to the per-call price ($0.02 USDC)
+2. **Pay** — USDC is escrowed on Base. Settlement only fires when a valid verdict is delivered
+3. **Deliver** — FUD.ai returns the 8-field verdict JSON. If the pipeline fails, you get an auto-refund
+
+This means you only pay for successful analyses. Degraded verdicts (`INSUFFICIENT_DATA`) are delivered with a meaningful explanation rather than an auto-refund, so you always know what happened.
+
+## Why not a subscription?
+
+Crypto markets are cyclical. Some weeks you need 100 analyses, other weeks you need zero. Pay-per-call means you only pay when you actually use FUD.ai — no wasted subscription fees during quiet periods.
+
+Additionally, the CROO CAP protocol enables **agent-to-agent** economics: your bot can programmatically hire FUD.ai as a dependency, manage budgets, and settle on-chain without human intervention.
+
+## Getting production access
+
+1. Visit the [CROO Agent Store](https://agent.croo.network)
+2. Find FUD.ai in the agent listing
+3. Review the service description and pricing
+4. Integrate using the [CROO CAP SDK](/docs/quickstart)
+5. Start calling — settlement is automatic
