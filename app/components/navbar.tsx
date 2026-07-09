@@ -8,7 +8,7 @@ import { ThemeToggle } from "./theme-toggle";
 import { LinkButton } from "./ui/button";
 import { cn } from "../lib/utils";
 
-const CROO_LISTING = "https://agent.croo.network";
+const CROO_HIRE_LINK = "https://agent.croo.network/agents/4799b7fe-3b19-4435-bdfe-93de07ec5c40?from=search";
 
 export function Navbar() {
   const [scrolled, setScrolled] = useState(false);
@@ -56,7 +56,7 @@ export function Navbar() {
             Docs
           </a>
           <LinkButton
-            href={CROO_LISTING}
+            href={CROO_HIRE_LINK}
             target="_blank"
             rel="noopener noreferrer"
             variant="secondary"
@@ -105,7 +105,7 @@ export function Navbar() {
               </div>
               {/* Hire button — full row */}
               <a
-                href={CROO_LISTING}
+                href={CROO_HIRE_LINK}
                 target="_blank"
                 rel="noopener noreferrer"
                 onClick={() => setMenuOpen(false)}

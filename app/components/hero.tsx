@@ -8,7 +8,7 @@ import { NetworkBackground } from "./network-background";
 import { getDemoUsage, DEMO_WEEKLY_LIMIT } from "../lib/demo-fingerprint";
 import { useEffect, useState } from "react";
 
-const CROO_LISTING = "https://agent.croo.network";
+const CROO_HIRE_LINK = "https://agent.croo.network/agents/4799b7fe-3b19-4435-bdfe-93de07ec5c40?from=search";
 
 /* ── Floating card positions (lg+ only) ── */
 const cardPositions = {
@@ -177,7 +177,7 @@ export function Hero() {
           {/* Buttons */}
           <div className="mt-7 flex flex-col items-center justify-center gap-3 sm:flex-row">
             <LinkButton
-              href={CROO_LISTING}
+              href={CROO_HIRE_LINK}
               target="_blank"
               rel="noopener noreferrer"
               variant="primary"

@@ -1,7 +1,7 @@
 import { Coins, Zap, Handshake, Bot } from "lucide-react";
 import { LinkButton } from "./ui/button";
 
-const CROO_LISTING = "https://agent.croo.network";
+const CROO_HIRE_LINK = "https://agent.croo.network/agents/4799b7fe-3b19-4435-bdfe-93de07ec5c40?from=search";
 
 const steps = [
   {
@@ -59,7 +59,7 @@ export function PricingCTA() {
 
             <div className="mt-10 flex flex-col items-start gap-4 sm:flex-row sm:items-center">
               <LinkButton
-                href={CROO_LISTING}
+                href={CROO_HIRE_LINK}
                 target="_blank"
                 rel="noopener noreferrer"
                 variant="primary"

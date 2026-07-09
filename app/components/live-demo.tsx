@@ -268,7 +268,7 @@ export function LiveDemo() {
               <div>
                 <p className="font-medium">{error}</p>
                 <a
-                  href="https://agent.croo.network"
+                  href="https://agent.croo.network/agents/4799b7fe-3b19-4435-bdfe-93de07ec5c40?from=search"
                   target="_blank"
                   rel="noopener noreferrer"
                   className="mt-1 inline-flex items-center gap-2 text-verdict-bull hover:underline"
