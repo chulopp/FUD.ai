@@ -422,18 +422,73 @@ async function resolveCoinGeckoId(symbol: string): Promise<string> {
 
 export async function fetchCoinGeckoMarkets(
   coinIdOrSymbol: string,
-  strategy?: DispatcherStrategy
+  strategy?: DispatcherStrategy,
+  contractAddress?: string,
+  chainId?: string
 ): Promise<IngestionResult<CoinGeckoMarketsData>> {
     if (strategy && !strategy.coingecko?.endpoints?.['/coins/markets']) {
         console.log('⏭️ [Ingestion] Skipping CoinGecko markets fetch (not requested by dispatcher)');
         return notCalled<CoinGeckoMarketsData>();
     }
 
+    const apiKey = process.env.COINGECKO_API_KEY;
+    const headers: Record<string, string> = { 'Accept': 'application/json' };
+    if (apiKey) headers['x-cg-demo-api-key'] = apiKey;
+
+    // ── Fix 1: Prefer contract-address lookup (unambiguous) ──
+    const hasContract = contractAddress
+        && contractAddress.trim() !== ''
+        && contractAddress.toLowerCase() !== 'native';
+
+    if (hasContract && chainId) {
+        // Map chainId → CoinGecko platform slug
+        const platformMap: Record<string, string> = {
+            '1': 'ethereum',
+            '56': 'binance-smart-chain',
+            '137': 'polygon-pos',
+            '42161': 'arbitrum-one',
+            '8453': 'base',
+            '43114': 'avalanche',
+            '10': 'optimistic-ethereum',
+            '250': 'fantom',
+            '25': 'cronos',
+            'solana': 'solana',
+        };
+        const platform = platformMap[chainId.toLowerCase()];
+
+        if (platform) {
+            try {
+                const url = `https://api.coingecko.com/api/v3/simple/token_price/${platform}?contract_addresses=${encodeURIComponent(contractAddress!)}&vs_currencies=usd&include_market_cap=true&include_24hr_vol=true&include_24hr_change=true`;
+                console.log(`🔎 [CoinGecko] Resolving by contract address on ${platform}: ${contractAddress}`);
+                const response = await fetchWithTimeout(url, { headers }, 10_000);
+
+                if (response.ok) {
+                    const data = await response.json();
+                    const addrKey = Object.keys(data || {})[0];
+                    const tokenData = addrKey ? data[addrKey] : null;
+
+                    if (tokenData && tokenData.usd !== undefined) {
+                        const result: CoinGeckoMarketsData = {
+                            current_price: tokenData.usd || 0,
+                            market_cap: tokenData.usd_market_cap || 0,
+                            total_volume: tokenData.usd_24h_vol || 0,
+                            price_change_percentage_24h: tokenData.usd_24h_change || 0,
+                            resolution_method: 'contract_address',
+                        };
+                        console.log(`✅ [CoinGecko] Contract-address resolution succeeded for ${contractAddress} on ${platform}`);
+                        return ok<CoinGeckoMarketsData>(result);
+                    }
+                }
+                console.warn(`⚠️ [CoinGecko] Contract-address lookup returned no data for ${contractAddress} on ${platform}. Falling back to symbol.`);
+            } catch (err) {
+                console.warn('[CoinGecko] Contract-address lookup failed, falling back to symbol:', err);
+            }
+        }
+    }
+
+    // ── Fix 2: Symbol-based fallback — flag as ambiguous ─────
     try {
         const resolvedId = await resolveCoinGeckoId(coinIdOrSymbol);
-        const apiKey = process.env.COINGECKO_API_KEY;
-        const headers: Record<string, string> = { 'Accept': 'application/json' };
-        if (apiKey) headers['x-cg-demo-api-key'] = apiKey;
 
         const response = await fetchWithTimeout(
             `https://api.coingecko.com/api/v3/coins/markets?vs_currency=usd&ids=${resolvedId.toLowerCase()}`,
@@ -456,12 +511,21 @@ export async function fetchCoinGeckoMarkets(
             market_cap: 0,
             total_volume: 0,
             price_change_percentage_24h: 0,
+            // Fix 2: Flag as ambiguous — symbol "ANSEM" resolves to 6+ different tokens
+            resolution_method: 'symbol_fallback_ambiguous',
         };
 
         if (!requestedFields || requestedFields.includes('current_price')) result.current_price = coinData.current_price || 0;
         if (!requestedFields || requestedFields.includes('market_cap')) result.market_cap = coinData.market_cap || 0;
         if (!requestedFields || requestedFields.includes('total_volume')) result.total_volume = coinData.total_volume || 0;
         if (!requestedFields || requestedFields.includes('price_change_percentage_24h')) result.price_change_percentage_24h = coinData.price_change_percentage_24h || 0;
+
+        if (hasContract) {
+            // We had an address but contract lookup failed — warn explicitly
+            console.warn(`⚠️ [CoinGecko] Falling back to symbol-based resolution for "${coinIdOrSymbol}" (contract lookup failed). Data may refer to a different token.`);
+        } else {
+            console.log(`ℹ️ [CoinGecko] Symbol-based resolution for "${coinIdOrSymbol}" (no contract address provided) — marked as ambiguous.`);
+        }
 
         return ok<CoinGeckoMarketsData>(result);
     } catch (error) {
@@ -470,6 +534,7 @@ export async function fetchCoinGeckoMarkets(
         return ingestionError<CoinGeckoMarketsData>(msg);
     }
 }
+
 
 export async function fetchCoinGeckoMacro(
   coinIdOrSymbol: string,

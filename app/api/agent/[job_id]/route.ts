@@ -56,7 +56,7 @@ export async function GET(_req: NextRequest, context: RouteContext) {
           status: 'failed',
           error: record.error || 'Pipeline encountered a fatal error.',
           executable_verdict: 'INSUFFICIENT_DATA',
-          confidence: null,
+          confidence: 0,
         },
         { status: 200 }
       );

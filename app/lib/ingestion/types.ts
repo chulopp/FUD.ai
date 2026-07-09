@@ -77,6 +77,13 @@ export interface CoinGeckoMarketsData {
   market_cap: number;
   total_volume: number;
   price_change_percentage_24h: number;
+  /**
+   * "contract_address" — resolved via /simple/token_price (unambiguous)
+   * "symbol_fallback_ambiguous" — resolved via /coins/markets by symbol;
+   * there may be 6+ tokens sharing the same symbol. LLM should downweight
+   * quantitative data from this source accordingly.
+   */
+  resolution_method?: 'contract_address' | 'symbol_fallback_ambiguous';
 }
 
 export interface CoinGeckoMacroData {

@@ -118,7 +118,7 @@ function makeDegradedVerdict(reason: string, logger?: PipelineStepLogger): Verdi
       { evidence: `Reason: ${reason}`, weight: 0.0 },
     ],
     executable_verdict: 'INSUFFICIENT_DATA',
-    confidence: null,
+    confidence: 0,
     market_cap_category: null,
     served_from_cache: false,
     fallback: true,
@@ -312,7 +312,7 @@ Output a JSON object:
   "branch_probabilities": {"<branch>": <0-1>},
   "evidence_chain": [
     {
-      "evidence": "[SOURCE_NAME] Grounded claim text... (You MUST prefix every claim's evidence string with the matching source name in brackets, e.g. '[BYBIT] Bybit order book shows...'. The source name must be one of: BYBIT, COINGECKO, DEXSCREENER, GOPLUS, RUGCHECK, TWITTER, TELEGRAM, DEFILLAMA, SYBIL, SECURITY, CAUSALITY, MOMENTUM)",
+      "evidence": "[SOURCE_NAME] Grounded claim text... (You MUST prefix every claim's evidence string with the matching source name in brackets, e.g. '[BYBIT] Bybit order book shows...'. The source name must be one of: BYBIT, COINGECKO, DEXSCREENER, GOPLUS, RUGCHECK, TWITTER, TELEGRAM, DEFILLAMA, SYBIL, SECURITY, CAUSALITY, MOMENTUM, DATA_QUALITY)",
       "weight": <fractional contribution 0.0 to 1.0, representing how heavily that specific piece of evidence influenced the final decision>
     }
   ],
@@ -470,6 +470,11 @@ export function groundEvidenceChain(
       else if (sourceName === 'sybil') mappedSource = 'sybil';
       else if (sourceName === 'momentum') mappedSource = 'momentum';
       else if (sourceName === 'causality') mappedSource = 'causality';
+      // Pipeline-generated prefixes — always keep, never subject to source status gating
+      else if (sourceName === 'data_quality' || sourceName === 'gate' || sourceName === 'security') {
+        grounded.push(item);
+        continue;
+      }
 
       if (sourceStatuses[mappedSource] !== undefined) {
         if (sourceStatuses[mappedSource] !== 'ok') {
@@ -1130,7 +1135,7 @@ export async function executeFudAnalysis(
     );
 
     const coingeckoMarketsPromise = withIngestionCache('coingecko_markets', () =>
-      fetchCoinGeckoMarkets(coinSymbol, dispatcherStrategy)
+      fetchCoinGeckoMarkets(coinSymbol, dispatcherStrategy, contractAddress, chainId)
         .catch(err => ({ status: 'error' as const, data: null, error_detail: err.message }))
     );
 
@@ -1164,6 +1169,61 @@ export async function executeFudAnalysis(
     ]);
 
     console.log('[Pipeline] Step A complete: all ingestion data gathered (with cache).');
+
+    // ── Fix 2 & 3: Data quality — ambiguity flag + CG vs DEX divergence ──
+    const dataQualityNotes: string[] = [];
+
+    // Fix 2: Warn LLM if CoinGecko data came from symbol-based fallback
+    if (coingeckoMarkets.status === 'ok' && coingeckoMarkets.data?.resolution_method === 'symbol_fallback_ambiguous') {
+      dataQualityNotes.push(
+        `[DATA_QUALITY] CoinGecko market data for "${coinSymbol}" was resolved by symbol (not contract address). ` +
+        `There may be 6+ different tokens sharing this symbol — this data may refer to a DIFFERENT token than intended. ` +
+        `Downweight quantitative values (market_cap, price) from CoinGecko in your evidence_chain. ` +
+        `Do NOT state CoinGecko figures as definitive facts without cross-referencing DexScreener data.`
+      );
+      console.warn(`[Pipeline] CoinGecko used symbol-fallback for "${coinSymbol}" — ambiguity note injected into context.`);
+    }
+
+    // Fix 3: Cross-source divergence detection — CoinGecko vs DexScreener
+    if (
+      coingeckoMarkets.status === 'ok' && coingeckoMarkets.data &&
+      dexData.status === 'ok' && dexData.data
+    ) {
+      const cgMcap = coingeckoMarkets.data.market_cap;
+      const dexMcap = dexData.data.marketCap || dexData.data.fdv; // prefer marketCap, fall back to FDV
+
+      if (cgMcap > 0 && dexMcap > 0) {
+        const divergencePct = Math.abs(cgMcap - dexMcap) / Math.max(cgMcap, dexMcap) * 100;
+        if (divergencePct > 30) {
+          const larger = cgMcap > dexMcap ? 'CoinGecko' : 'DexScreener';
+          dataQualityNotes.push(
+            `[DATA_QUALITY] Market cap divergence detected between CoinGecko and DexScreener: ` +
+            `CoinGecko reports $${cgMcap.toLocaleString()} vs DexScreener $${dexMcap.toLocaleString()} ` +
+            `(${divergencePct.toFixed(1)}% difference, ${larger} is higher). ` +
+            `This may indicate: (a) CoinGecko resolved the wrong token (symbol collision), ` +
+            `(b) CoinGecko data is lagging during a rapid pump/dump, or ` +
+            `(c) DexScreener is using FDV instead of circulating market cap. ` +
+            `DO NOT silently pick one source — cite both figures and this discrepancy explicitly.`
+          );
+          console.warn(`[Pipeline] CoinGecko vs DexScreener market cap divergence ${divergencePct.toFixed(1)}% for ${coinSymbol} — injecting [DATA_QUALITY] note.`);
+        }
+      }
+
+      // Also check price divergence
+      const cgPrice = coingeckoMarkets.data.current_price;
+      const dexPrice = parseFloat(dexData.data.priceUsd);
+      if (cgPrice > 0 && dexPrice > 0) {
+        const priceDivergencePct = Math.abs(cgPrice - dexPrice) / Math.max(cgPrice, dexPrice) * 100;
+        if (priceDivergencePct > 30) {
+          dataQualityNotes.push(
+            `[DATA_QUALITY] Price divergence detected: CoinGecko $${cgPrice.toFixed(6)} vs DexScreener $${dexPrice.toFixed(6)} ` +
+            `(${priceDivergencePct.toFixed(1)}% difference). Strong indicator of symbol collision — ` +
+            `CoinGecko may have resolved to a DIFFERENT token. Treat CoinGecko price data with very low confidence.`
+          );
+          console.warn(`[Pipeline] CoinGecko vs DexScreener price divergence ${priceDivergencePct.toFixed(1)}% for ${coinSymbol}`);
+        }
+      }
+    }
 
     // Legacy normalized metrics log (for test-intelligence.js interceptor)
     const metrics = getNormalizedMetrics(dexData, coingeckoMarkets, orderBook);
@@ -1290,7 +1350,7 @@ export async function executeFudAnalysis(
       contractAddress,
       chainId,
       ...contextBase,
-      fudClaims,
+      fudClaims: [...dataQualityNotes, ...fudClaims],
       sourceStatuses,
       coordinationSignals,
       momentumResult,

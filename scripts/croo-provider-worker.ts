@@ -207,7 +207,8 @@ function validateCoinSymbol(symbol: unknown): { valid: true; symbol: string } | 
 
 /**
  * Safely parses the negotiation requirements JSON string.
- * The Requester sends: '{"coin_symbol":"BTC","contract_address":"0x...","chain_id":"1"}'
+ * The Requester sends: '{"coin_symbol":"BTC","token_contract":"0x...","chain_id":"1"}'
+ * (Note: We use token_contract instead of contract_address to bypass CROO dashboard EVM validation bugs)
  */
 function safeParseRequirements(requirements: string): AnalysisParams | null {
   try {
@@ -215,7 +216,8 @@ function safeParseRequirements(requirements: string): AnalysisParams | null {
     if (parsed && typeof parsed === 'object') {
       return {
         coin_symbol: parsed.coin_symbol,
-        contract_address: parsed.contract_address,
+        // Map frontend's token_contract to internal contract_address (with fallback for old orders)
+        contract_address: parsed.token_contract || parsed.contract_address,
         chain_id: parsed.chain_id,
       };
     }
@@ -295,8 +297,18 @@ async function handleNegotiationCreated(
   const negId = e.negotiation_id;
   log('INFO', `[Negotiation] Incoming: ${negId}`);
 
+  let requirementsStr = e.requirements;
+  if (!requirementsStr) {
+    try {
+      const neg = await client.getNegotiation(negId);
+      requirementsStr = neg?.requirements;
+    } catch (err) {
+      log('ERROR', `[Negotiation] Failed to fetch negotiation ${negId} from API`, err);
+    }
+  }
+
   // Parse requirements
-  const params = e.requirements ? safeParseRequirements(e.requirements) : null;
+  const params = requirementsStr ? safeParseRequirements(requirementsStr) : null;
 
   if (!params) {
     const reason = 'Invalid requirements: expected JSON with coin_symbol field.';
@@ -465,9 +477,9 @@ async function handleOrderPaid(
 
     const deliverable = stripToDeliverableSchema(verdict);
     await client.deliverOrder(orderId, {
-      type: DeliverableType.Schema,
-      data: deliverable as Record<string, unknown>,
-    });
+      deliverableType: 'schema',
+      deliverable_schema: JSON.stringify(deliverable),
+    } as any);
     completedOrders.add(orderId);
 
     log('INFO', `[OrderPaid] ✓ Delivered order ${orderId} (${coin_symbol} → ${verdict.executable_verdict}, elapsed: ${elapsed}ms)`);
@@ -483,9 +495,9 @@ async function handleOrderPaid(
       try {
         const degraded = buildDegradedDeliverable(`pipeline_error:${errMsg.slice(0, 100)}`);
         await client.deliverOrder(orderId, {
-          type: DeliverableType.Schema,
-          data: degraded as Record<string, unknown>,
-        });
+          deliverableType: 'schema',
+          deliverable_schema: JSON.stringify(degraded),
+        } as any);
         completedOrders.add(orderId);
         log('INFO', `[OrderPaid] Degraded delivery submitted for failed order ${orderId}`);
       } catch (deliverErr) {
@@ -598,6 +610,26 @@ async function main() {
   });
 
   log('INFO', 'Worker is ready. Waiting for negotiations...');
+
+  // ── Recovery of missed Paid orders ───────────────────────────
+  log('INFO', 'Synchronizing missed paid orders...');
+  try {
+    const orders = await client.listOrders({ status: 'paid', role: 'provider' });
+    if (orders && orders.length > 0) {
+      log('INFO', `Found ${orders.length} paid orders to recover.`);
+      for (const order of orders) {
+        log('INFO', `Recovering order ${order.orderId}`);
+        // Simulate OrderPaid event
+        handleOrderPaid({ order_id: order.orderId }, client).catch(err => {
+          log('ERROR', `Failed to recover order ${order.orderId}`, err);
+        });
+      }
+    } else {
+      log('INFO', 'No missed paid orders found.');
+    }
+  } catch (err) {
+    log('ERROR', 'Failed to synchronize orders during startup', err);
+  }
 
   // ── Graceful Shutdown ────────────────────────────────────────
   const shutdown = (signal: string) => {

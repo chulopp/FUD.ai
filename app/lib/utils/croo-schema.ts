@@ -32,8 +32,8 @@ export interface CrooDeliverable {
   /** Composite intensity index (0–100). */
   drama_index: number;
 
-  /** Pipeline confidence in the verdict (0.0–1.0, or null if degraded). */
-  confidence: number | null;
+  /** Pipeline confidence in the verdict (0.0–1.0). 0 if degraded. */
+  confidence: number;
 
   /** The dominant narrative branch from MCTS analysis. */
   dominant_branch: string;
@@ -90,7 +90,7 @@ export function stripToDeliverableSchema(verdict: VerdictResult): CrooDeliverabl
   return {
     executable_verdict: verdict.executable_verdict,
     drama_index: verdict.drama_index,
-    confidence: verdict.confidence,
+    confidence: verdict.confidence ?? 0,
     dominant_branch: verdict.dominant_branch ?? 'unknown',
     evidence_chain: evidenceStrings,
     coordination_signals: verdict.coordination_signals ?? {
@@ -113,7 +113,7 @@ export function buildDegradedDeliverable(reason: string): CrooDeliverable {
   return {
     executable_verdict: 'INSUFFICIENT_DATA',
     drama_index: 0,
-    confidence: null,
+    confidence: 0,
     dominant_branch: `degraded:${reason}`,
     evidence_chain: [`Analysis could not complete: ${reason}`],
     coordination_signals: {
