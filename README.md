@@ -16,8 +16,8 @@
 
 | | |
 |---|---|
-| **Website** | [fud.ai](https://your-website-url.com) |
-| **Docs** | [docs.fud.ai](https://docs.fud.ai) |
+| **Website** | [fudai-two.vercel.app](https://fudai-two.vercel.app/) |
+| **Docs** | [fudai-two.vercel.app/docs](https://fudai-two.vercel.app/docs) |
 | **Live Demo** | [demo.fud.ai](https://demo.fud.ai) |
 | **X (Twitter)** | [x.com/fuddulu](https://x.com/fuddulu) |
 | **GitHub** | [github.com/chulopp/FUD.ai](https://github.com/chulopp/FUD.ai) |
