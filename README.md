@@ -1,4 +1,8 @@
-# <img src="public/LOGOFUD.png" alt="FUD.ai Logo" width="40" /> FUD.ai
+<p align="center">
+  <img src="public/LOGOFUD.png" alt="FUD.ai Logo" width="120" />
+</p>
+
+# FUD.ai
 
 > *Agentic on-chain intelligence that detects coordinated FUD and rug-pull manipulation in real time.*
 
