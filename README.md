@@ -1,4 +1,4 @@
-![FUD.ai Logo](public/LOGOFUD.png)
+<img src="public/LOGOFUD.png" alt="FUD.ai Logo" width="150" />
 
 # FUD.ai
 
