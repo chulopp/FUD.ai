@@ -24,6 +24,11 @@
   --dot-color: rgba(0, 0, 0, 0.08);
   --terminal-bg: #0b0e13;
   --terminal-text: #4ade80;
+
+  /* Network background colors — light mode (slate, clearly visible) */
+  --net-line: rgba(100, 116, 139, 0.22);
+  --net-node: rgba(100, 116, 139, 0.38);
+  --net-accent: rgba(0, 184, 100, 0.45);
 }
 
 .dark {
@@ -48,6 +53,11 @@
   --dot-color: rgba(255, 255, 255, 0.07);
   --terminal-bg: #04060a;
   --terminal-text: #22ff88;
+
+  /* Network background colors — dark mode (slate-800, clearly visible) */
+  --net-line: rgba(148, 163, 184, 0.15);
+  --net-node: rgba(148, 163, 184, 0.30);
+  --net-accent: rgba(34, 255, 136, 0.40);
 }
 
 @theme inline {
@@ -84,12 +94,53 @@ body {
   background: var(--background);
   color: var(--foreground);
   font-family: var(--font-geist-sans), Arial, Helvetica, sans-serif;
-  transition: background-color 0.2s ease, color 0.2s ease;
 }
 
 ::selection {
   background: var(--verdict-bull-glow);
   color: var(--foreground);
+}
+
+/* ── Smooth theme transition (fallback when View Transition API unavailable) ── */
+/* Scoped to key surfaces only — applying to every nested div/span causes repaint flicker */
+html,
+body {
+  transition-property: background-color, color;
+  transition-timing-function: cubic-bezier(0.4, 0, 0.2, 1);
+  transition-duration: 600ms;
+}
+
+/* During View Transition, suppress CSS transitions to avoid double-animation flicker */
+html.vt-active,
+html.vt-active * {
+  transition: none !important;
+}
+
+/* ── View Transition API: circular theme reveal ── */
+::view-transition-old(root),
+::view-transition-new(root) {
+  animation: none;
+  mix-blend-mode: normal;
+}
+::view-transition-new(root) {
+  animation: theme-reveal 0.65s cubic-bezier(0.22, 1, 0.36, 1);
+}
+@keyframes theme-reveal {
+  from {
+    clip-path: circle(0px at var(--theme-x, 100%) var(--theme-y, 0%));
+  }
+  to {
+    clip-path: circle(145% at var(--theme-x, 100%) var(--theme-y, 0%));
+  }
+}
+
+/* ── Shine effect for primary CTA button ── */
+@keyframes shine-sweep {
+  0% { left: -120%; }
+  55%, 100% { left: 220%; }
+}
+.shine-sweep {
+  animation: shine-sweep 3.5s ease-in-out infinite;
 }
 
 .bg-dotmatrix {
