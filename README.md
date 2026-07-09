@@ -1,4 +1,4 @@
-![FUD.ai Logo](https://via.placeholder.com/150/000000/ffffff?text=FUD.ai+Logo)
+![FUD.ai Logo](public/LOGOFUD.png)
 
 # FUD.ai
 
