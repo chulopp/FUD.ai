@@ -19,7 +19,7 @@
 | **Website** | [fudai-two.vercel.app](https://fudai-two.vercel.app/) |
 | **Docs** | [fudai-two.vercel.app/docs](https://fudai-two.vercel.app/docs) |
 | **CROO Agent** | [Hire FUD.ai on CROO](https://agent.croo.network/agents/4799b7fe-3b19-4435-bdfe-93de07ec5c40?from=search) |
-| **Live Demo** | [demo.fud.ai](https://demo.fud.ai) |
+| **Live Demo (Video)** | [YouTube](https://youtu.be/rAsAm_W4LKU) |
 | **X (Twitter)** | [x.com/fuddulu](https://x.com/fuddulu) |
 | **GitHub** | [github.com/chulopp/FUD.ai](https://github.com/chulopp/FUD.ai) |
 
