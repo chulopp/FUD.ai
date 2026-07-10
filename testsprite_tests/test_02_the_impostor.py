@@ -26,7 +26,10 @@ import requests
 import time
 import os
 
-BASE_URL = "https://reword-situated-barman.ngrok-free.dev"
+try:
+    BASE_URL = TARGET_URL
+except NameError:
+    BASE_URL = "https://reword-situated-barman.ngrok-free.dev"
 CRON_URL = f"{BASE_URL}/api/cron/calibrate"
 AGENT_URL = f"{BASE_URL}/api/agent"
 

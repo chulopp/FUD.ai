@@ -25,7 +25,10 @@ TTL: 2 minutes (120 seconds) — set in app/lib/redis/ingestion-cache.ts
 import requests
 import time
 
-BASE_URL = "https://reword-situated-barman.ngrok-free.dev"
+try:
+    BASE_URL = TARGET_URL
+except NameError:
+    BASE_URL = "https://reword-situated-barman.ngrok-free.dev"
 AGENT_URL = f"{BASE_URL}/api/agent"
 
 TIMEOUT = 30
