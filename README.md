@@ -236,7 +236,7 @@ The CROO worker (`scripts/croo-provider-worker.ts`) connects to the CROO CAP Web
 | **UI** | React 19, Tailwind CSS v4, Framer Motion, Recharts, Lucide Icons |
 | **Docs** | Fumadocs (MDX, integrated in same app at `/docs`) |
 | **State / Cache** | Upstash Redis (REST-based serverless Redis) |
-| **AI / Reasoning** | MCTS-inspired multi-branch engine, Reflexion loop, OpenRouter / Gemini / DeepSeek / AWS Bedrock |
+| **AI / Reasoning** | MCTS-inspired multi-branch engine, Reflexion loop, OpenRouter / Gemini / DeepSeek |
 | **On-chain data** | GoPlus Security, RugCheck, DexScreener, CoinGecko, DefiLlama, Bybit |
 | **Social signals** | agent-twitter-client (native), Telegram web scraper (axios + cheerio) |
 | **Agent protocol** | CROO CAP SDK (`@croo-network/sdk`), Base mainnet settlement |
