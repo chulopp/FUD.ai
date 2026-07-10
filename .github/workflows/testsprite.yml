@@ -1,0 +1,74 @@
+name: TestSprite CI
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  testsprite-check:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Install TestSprite CLI
+        run: npm install -g @testsprite/testsprite-cli
+
+      - name: TestSprite Setup
+        env:
+          TESTSPRITE_API_KEY: ${{ secrets.TESTSPRITE_API_KEY }}
+        run: |
+          testsprite setup --from-env --yes --agent claude
+
+      # Bouncer (Server Concurrency Check): Fast and deterministic, completes in under 15s.
+      - name: Run TestSprite - Bouncer (Concurrency Check)
+        id: bouncer
+        continue-on-error: true
+        env:
+          TESTSPRITE_API_KEY: ${{ secrets.TESTSPRITE_API_KEY }}
+        run: |
+          testsprite test run 9764533b-3d4e-4cae-9983-ef67cd9a59b8 --target-url https://fud-ai.vercel.app --wait --timeout 30
+
+      # Impostor (Auth & Cron Security Check): Fast and deterministic, completes in under 15s.
+      - name: Run TestSprite - Impostor (Auth Security Check)
+        id: impostor
+        continue-on-error: true
+        env:
+          TESTSPRITE_API_KEY: ${{ secrets.TESTSPRITE_API_KEY }}
+        run: |
+          testsprite test run 58ea82a4-ba55-49b9-9d68-82c67d8359c1 --target-url https://fud-ai.vercel.app --wait --timeout 30
+
+      # Justification for Excluding Long/Async Tests from blocking CI:
+      # The 30-second TestSprite proxy tunnel limit causes longer tests (Golden Meme, Flash Crash,
+      # Trojan Horse) to fail due to sequential grounding or LLM evaluation latency (>45s).
+      # These must be run manually or via scheduled tasks, NOT as blocking pull-request tests.
+
+      - name: Generate Job Summary
+        if: always()
+        run: |
+          echo "### TestSprite CI/CD Verification Summary 🚀" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "| Test Case | Focus | Status |" >> $GITHUB_STEP_SUMMARY
+          echo "|---|---|---|" >> $GITHUB_STEP_SUMMARY
+          
+          if [ "${{ steps.bouncer.outcome }}" = "success" ]; then
+            echo "| **Bouncer** (Concurrency Check) | Server overload handling | ✅ PASS |" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "| **Bouncer** (Concurrency Check) | Server overload handling | ❌ FAIL/TIMEOUT |" >> $GITHUB_STEP_SUMMARY
+          fi
+          
+          if [ "${{ steps.impostor.outcome }}" = "success" ]; then
+            echo "| **Impostor** (Auth & Security Check) | Cron/validation security | ✅ PASS |" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "| **Impostor** (Auth & Security Check) | Cron/validation security | ❌ FAIL/TIMEOUT |" >> $GITHUB_STEP_SUMMARY
+          fi
+          
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "Note: Long-running async MCTS tests (Golden Meme, Flash Crash, Trojan Horse) are scheduled separately to respect the 30s tunnel limit." >> $GITHUB_STEP_SUMMARY

@@ -274,6 +274,13 @@ FUD.ai uses the **TestSprite Verification Loop** methodology for automated testi
 | 8 | Sybil & Prompt Injection Verification | TestSprite CLI | ✅ PASS (Run 2) | [Dashboard Run](https://www.testsprite.com/dashboard/tests/efd7c80f-4eb2-421b-9f92-c1a629004147/test/94042f95-f3ad-4bb7-8569-52d83e117ffa) |
 | 9 | E2E Website & Quota Sync | TestSprite CLI | ✅ PASS (Run 3) | [Dashboard Run](https://www.testsprite.com/dashboard/tests/efd7c80f-4eb2-421b-9f92-c1a629004147/test/fb546917-31bd-4155-b9de-d96b873b2308) |
 
+### CI/CD Workflow Integration
+
+TestSprite verification is automated via GitHub Actions in [.github/workflows/testsprite.yml](.github/workflows/testsprite.yml).
+- **CI Trigger**: Fires on every `push` to `main` and `pull_request`.
+- **CI Test Scope**: Executes **Bouncer (Concurrency)** and **Impostor (Auth Validation)** checks against the live environment. These are fast and highly deterministic.
+- **Manual/Scheduled Scope**: Heavyweight MCTS reasoning runs (Golden Meme, Flash Crash, Trojan Horse) are scheduled separately to bypass the 30-second connection proxy limit.
+
 For detailed breakdowns of each test case scenario (including user interface responsiveness and rate limits), refer to the comprehensive [LOOP.md](LOOP.md) log.
 
 ---

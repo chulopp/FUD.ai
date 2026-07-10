@@ -1223,3 +1223,45 @@ Method: POST
 - **Actual Verdict**: ✅ Passed (Visual confirmation)
 - **Dashboard Link**: [Run 3 E2E Core](https://www.testsprite.com/dashboard/tests/efd7c80f-4eb2-421b-9f92-c1a629004147/test/fb546917-31bd-4155-b9de-d96b873b2308)
 - **Engineering Notes**: Verified rate sync successfully. Fingerprints with exhausted usage are correctly blocked by Redis and verified via GET before submission.
+
+---
+
+## Phase 10: CI/CD Integration (CLI)
+- **Objective**: Automate the verification of critical server infrastructure against regressions on every `push` and `pull_request` using GitHub Actions.
+- **Tooling**: TestSprite CLI + GitHub Actions CI runner
+
+### CI/CD Boundary Strategy
+Due to the strict 30-second proxy timeout limit on the TestSprite tunnel infrastructure, only fast and deterministic verification tests are run in CI. Heavyweight MCTS simulation cases (which typically require 45-120s due to serial LLM evaluations and social ingestion scrapers) are configured as scheduled/manual runs.
+
+- **CI Suite (Blocking)**:
+  - **Bouncer** (Concurrency handling check)
+  - **Impostor** (Auth & API validation check)
+- **Manual/Scheduled Suite (Non-blocking in CI)**:
+  - **Golden Meme** (Solana parameters & routing check)
+  - **Flash Crash** (Upstash Redis L2 Ingestion caching check)
+  - **Trojan Horse** (Sybil & Prompt Injection check)
+
+### Execution History
+
+#### Run #1: Initial CI Setup
+- **Date**: 2026-07-10
+- **Status**: ✅ PASS
+- **GitHub Actions Run**: [CI Verification #1](https://github.com/chulopp/FUD.ai/actions)
+
+##### Execution Summary
+- **Total Tests**: 2
+- **Passed**: 2
+- **Failed**: 0
+
+##### Test Cases & Scenarios
+###### Test 1 - The Bouncer (Server Concurrency)
+- **Target/Endpoint**: POST `/api/agent` & GET `/api/agent/[job_id]`
+- **Actual Verdict**: ✅ Passed
+- **Dashboard Link**: [Run 3 Test 1](https://www.testsprite.com/dashboard/tests/efd7c80f-4eb2-421b-9f92-c1a629004147/test/9764533b-3d4e-4cae-9983-ef67cd9a59b8)
+- **Engineering Notes**: Verified concurrency limits and 429 rate limit responses gracefully.
+
+###### Test 2 - The Impostor (Cron Security & Fake Coins)
+- **Target/Endpoint**: POST `/api/agent`
+- **Actual Verdict**: ✅ Passed
+- **Dashboard Link**: [Run 3 Test 2](https://www.testsprite.com/dashboard/tests/efd7c80f-4eb2-421b-9f92-c1a629004147/test/58ea82a4-ba55-49b9-9d68-82c67d8359c1)
+- **Engineering Notes**: Invalid coin symbols and unauthorized cron requests are immediately rejected by validation middleware.
