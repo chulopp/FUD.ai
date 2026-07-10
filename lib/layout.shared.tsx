@@ -3,6 +3,7 @@ import type { BaseLayoutProps } from 'fumadocs-ui/layouts/shared';
 export function baseOptions(): BaseLayoutProps {
   return {
     nav: {
+      url: '/',
       title: (
         <span className="flex items-center gap-2">
           <img
