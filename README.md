@@ -276,7 +276,7 @@ FUD.ai uses the **TestSprite Verification Loop** methodology for automated testi
 
 ### CI/CD Workflow Integration
 
-TestSprite verification is automated via GitHub Actions in [.github/workflows/testsprite.yml](.github/workflows/testsprite.yml).
+TestSprite verification is automated via GitHub Actions in [.github/workflows/testsprite.yml](.github/workflows/testsprite.yml) workflow.
 - **CI Trigger**: Fires on every `push` to `main` and `pull_request`.
 - **CI Test Scope**: Executes **Bouncer (Concurrency)** and **Impostor (Auth Validation)** checks against the live environment. These are fast and highly deterministic.
 - **Manual/Scheduled Scope**: Heavyweight MCTS reasoning runs (Golden Meme, Flash Crash, Trojan Horse) are scheduled separately to bypass the 30-second connection proxy limit.
