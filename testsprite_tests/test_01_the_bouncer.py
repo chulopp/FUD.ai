@@ -17,10 +17,7 @@
 
 import asyncio
 import aiohttp
-try:
-    BASE_URL = TARGET_URL
-except NameError:
-    BASE_URL = "https://reword-situated-barman.ngrok-free.dev"
+BASE_URL = "https://fud-ai.vercel.app"
 POST_URL = f"{BASE_URL}/api/agent"
 REQUEST_TIMEOUT = aiohttp.ClientTimeout(total=30)
 

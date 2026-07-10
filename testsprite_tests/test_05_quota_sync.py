@@ -19,10 +19,7 @@ import requests
 import random
 import time
 
-try:
-    BASE_URL = TARGET_URL
-except NameError:
-    BASE_URL = "https://fud-ai.vercel.app"
+BASE_URL = "https://fud-ai.vercel.app"
 API_URL = f"{BASE_URL}/api/agent"
 
 def run_quota_sync_test():
