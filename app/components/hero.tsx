@@ -5,7 +5,7 @@ import Image from "next/image";
 import { Play, Network, Code, Bot } from "lucide-react";
 import { LinkButton } from "./ui/button";
 import { NetworkBackground } from "./network-background";
-import { getDemoUsage, DEMO_WEEKLY_LIMIT } from "../lib/demo-fingerprint";
+import { getDemoUsage, DEMO_WEEKLY_LIMIT, getDemoFingerprint } from "../lib/demo-fingerprint";
 import { useEffect, useState } from "react";
 
 const CROO_HIRE_LINK = "https://agent.croo.network/agents/4799b7fe-3b19-4435-bdfe-93de07ec5c40?from=search";
@@ -70,10 +70,38 @@ export function Hero() {
   const [hasQuota, setHasQuota] = useState(true);
 
   useEffect(() => {
+    // 1. Initial paint from local storage
     const usage = getDemoUsage();
     if (usage.count >= DEMO_WEEKLY_LIMIT) {
       setHasQuota(false);
     }
+
+    // 2. Fetch server-side source of truth
+    const fingerprint = getDemoFingerprint();
+    fetch("/api/agent", {
+      headers: { "X-Demo-Fingerprint": fingerprint },
+    })
+      .then((res) => res.json())
+      .then((data) => {
+        if (data && typeof data.usageCount === "number") {
+          if (data.usageCount >= data.limit) {
+            setHasQuota(false);
+            // Sync local storage
+            localStorage.setItem(
+              "fud_demo_usage",
+              JSON.stringify({
+                count: data.usageCount,
+                windowStart: usage.windowStart || Date.now(),
+              }),
+            );
+          } else {
+            setHasQuota(true);
+          }
+        }
+      })
+      .catch(() => {
+        // ignore fetch failures, fallback to local storage
+      });
   }, []);
 
   return (

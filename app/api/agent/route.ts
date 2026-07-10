@@ -25,6 +25,32 @@ import crypto from 'crypto';
 const DEMO_WEEKLY_LIMIT = process.env.NODE_ENV === 'development' ? 9999 : 2;
 const FINGERPRINT_RATE_KEY_PREFIX = 'demo:fp:';
 
+export async function GET(req: NextRequest) {
+  try {
+    const fingerprint = req.headers.get('X-Demo-Fingerprint');
+    if (!fingerprint) {
+      return NextResponse.json(
+        { usageCount: 0, limit: DEMO_WEEKLY_LIMIT },
+        { status: 200 }
+      );
+    }
+
+    const fpKey = `${FINGERPRINT_RATE_KEY_PREFIX}${fingerprint}`;
+    const currentCount = await redis.get<number>(fpKey) ?? 0;
+
+    return NextResponse.json(
+      { usageCount: currentCount, limit: DEMO_WEEKLY_LIMIT },
+      { status: 200 }
+    );
+  } catch (error) {
+    console.error('[API Route] Error in GET /api/agent (quota):', error);
+    return NextResponse.json(
+      { usageCount: 0, limit: DEMO_WEEKLY_LIMIT },
+      { status: 200 }
+    );
+  }
+}
+
 export async function POST(req: NextRequest) {
   try {
     const body = await req.json().catch(() => ({}));

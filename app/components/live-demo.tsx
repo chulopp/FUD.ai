@@ -92,7 +92,34 @@ export function LiveDemo() {
   const { completedLines, currentTyping } = useTerminalTyper(runId, pipelineDone);
 
   useEffect(() => {
-    setUsageLeft(Math.max(0, DEMO_WEEKLY_LIMIT - getDemoUsage().count));
+    // 1. Initial paint from local storage
+    const usage = getDemoUsage();
+    setUsageLeft(Math.max(0, DEMO_WEEKLY_LIMIT - usage.count));
+
+    // 2. Fetch server-side source of truth
+    const fingerprint = getDemoFingerprint();
+    fetch("/api/agent", {
+      headers: { "X-Demo-Fingerprint": fingerprint },
+    })
+      .then((res) => res.json())
+      .then((data) => {
+        if (data && typeof data.usageCount === "number") {
+          const left = Math.max(0, data.limit - data.usageCount);
+          setUsageLeft(left);
+
+          // Sync local storage
+          localStorage.setItem(
+            "fud_demo_usage",
+            JSON.stringify({
+              count: data.usageCount,
+              windowStart: usage.windowStart || Date.now(),
+            }),
+          );
+        }
+      })
+      .catch(() => {
+        // ignore fetch failures, fallback to local storage
+      });
   }, []);
 
   useEffect(() => {
