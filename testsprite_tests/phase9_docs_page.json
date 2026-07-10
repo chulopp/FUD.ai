@@ -1,0 +1,29 @@
+{
+  "projectId": "efd7c80f-4eb2-421b-9f92-c1a629004147",
+  "type": "frontend",
+  "name": "Phase 9: Documentation Navigation",
+  "description": "Verifies that the documentation pages and navigation links load and work correctly.",
+  "priority": "p1",
+  "planSteps": [
+    {
+      "type": "action",
+      "description": "Navigate to the documentation page /docs"
+    },
+    {
+      "type": "assertion",
+      "description": "Assert that the page content displays the main title 'Introduction'"
+    },
+    {
+      "type": "assertion",
+      "description": "Assert that the sidebar navigation links are visible"
+    },
+    {
+      "type": "action",
+      "description": "Click on the API Reference link in the sidebar or quick links card"
+    },
+    {
+      "type": "assertion",
+      "description": "Assert that the API Reference page loads and displays 'API Reference'"
+    }
+  ]
+}
