@@ -36,6 +36,10 @@ jobs:
         run: |
           testsprite test run 9764533b-3d4e-4cae-9983-ef67cd9a59b8 --target-url https://fud-ai.vercel.app --wait --timeout 30
 
+      # Wait for Bouncer's 5 queued jobs to drain so Impostor doesn't hit the concurrency limit.
+      - name: Wait for Bouncer jobs to drain
+        run: sleep 15
+
       # Impostor (Auth & Cron Security Check): Fast and deterministic, completes in under 15s.
       - name: Run TestSprite - Impostor (Auth Security Check)
         id: impostor
