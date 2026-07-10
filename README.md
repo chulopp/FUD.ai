@@ -9,6 +9,7 @@
 [![Version](https://img.shields.io/badge/version-0.1.0-000000?style=flat-square)](https://github.com/chulopp/FUD.ai)
 [![Status](https://img.shields.io/badge/status-active-00b864?style=flat-square)](https://github.com/chulopp/FUD.ai)
 [![License](https://img.shields.io/badge/license-MIT-00b864?style=flat-square)](LICENSE)
+[![Tests](https://img.shields.io/badge/tests-9%20phases%20passed-00b864?style=flat-square)](LOOP.md)
 
 ---
 
@@ -16,8 +17,8 @@
 
 | | |
 |---|---|
-| **Website** | [fudai-two.vercel.app](https://fudai-two.vercel.app/) |
-| **Docs** | [fudai-two.vercel.app/docs](https://fudai-two.vercel.app/docs) |
+| **Website** | [fud-ai.vercel.app](https://fud-ai.vercel.app/) |
+| **Docs** | [fud-ai.vercel.app/docs](https://fud-ai.vercel.app/docs) |
 | **CROO Agent** | [Hire FUD.ai on CROO](https://agent.croo.network/agents/4799b7fe-3b19-4435-bdfe-93de07ec5c40?from=search) |
 | **Live Demo (Video)** | [YouTube](https://youtu.be/sLf7Go1UpdM) |
 | **X (Twitter)** | [x.com/fuddulu](https://x.com/fuddulu) |
@@ -189,6 +190,39 @@ npm run croo:worker
 
 > **Note:** Deploy this worker as a **single replica**. CROO enforces 1 API Key = 1 WebSocket connection — duplicate instances get disconnected with code 1008.
 
+## Deployment Guide
+
+FUD.ai is designed to be deployed as two separate components: a serverless **Next.js Web Frontend** (on Vercel) and a long-running **CROO Worker Process** (on Render or a VPS).
+
+### 1. Web Frontend Deployment (Vercel)
+
+The Next.js application handles the user interface, MDX documentation, and `/api/agent` REST endpoints.
+
+1. **Deploy to Vercel**: Connect your GitHub repository to Vercel.
+2. **Environment Variables**: Add all environment variables listed in `.env.example` in the Vercel Project Settings.
+3. **Important Configuration**:
+   - Ensure `UPSTASH_REDIS_REST_URL` and `UPSTASH_REDIS_REST_TOKEN` are set correctly to allow background async job updates.
+   - Vercel automatically handles Next.js App Router `waitUntil()` functions to complete MCTS pipelines in the background.
+
+### 2. CROO Provider Worker Deployment (Render)
+
+The CROO worker (`scripts/croo-provider-worker.ts`) connects to the CROO CAP WebSocket to manage real-time agent-to-agent job routing and settlement. It is not an HTTP server; it is a persistent node process.
+
+1. **Deploy to Render**:
+   - Create a new **Background Worker** on Render (supports persistent background processes with no open ports).
+   - Build Command: `npm run build`
+   - Start Command: `npm run croo:worker:prod` (uses ESM imports for executing TS scripts)
+2. **Environment Variables**: Add the required environment variables:
+   - `CROO_SDK_KEY`
+   - `CROO_API_URL`
+   - `CROO_WS_URL`
+   - `UPSTASH_REDIS_REST_URL`
+   - `UPSTASH_REDIS_REST_TOKEN`
+   - LLM and API keys matching the frontend deployment.
+3. **Scaling Restriction**:
+   > [!WARNING]
+   > You **must** scale the Render worker as a **single instance (1 replica)**. If multiple replicas are run using the same `CROO_SDK_KEY`, CROO's gateway will close duplicate connections with code `1008 (Policy Violation)`.
+
 ---
 
 ## Tech Stack & Features
@@ -222,6 +256,26 @@ npm run croo:worker
 - **Live demo** — rate-limited (2 calls/week per device) showcase on the landing page
 - **Full documentation** — Quickstart, Core Concepts, API Reference, FAQ, built with Fumadocs
 
+## Testing & LOOP Coverage
+
+FUD.ai uses the **TestSprite Verification Loop** methodology for automated testing across 9 core development phases. All test plans, logs, and failure retrospectives are fully documented in [LOOP.md](LOOP.md).
+
+### Test Coverage Summary
+
+| Phase | Focus Area | Tooling | Final Status | Dashboard Link |
+|---|---|---|---|---|
+| 1 | Native Payload Schema Verification | TestSprite CLI | ✅ PASS | [Dashboard Run](https://www.testsprite.com/dashboard/tests/efd7c80f-4eb2-421b-9f92-c1a629004147/test/bb62ab19-d9b0-4dca-9a7e-615f2d7c1bd9) |
+| 2 | Fuzzing & Resilience (POST `/api/agent`) | TestSprite MCP | ✅ PASS (Run 2) | [Dashboard Run](https://www.testsprite.com/dashboard/mcp/tests/4fd382bb-67c1-476d-80e4-bb1ec70efc1f/test/c71e5e77-a4b9-451c-bc42-82fe327c11c2) |
+| 3 | End-to-End Ingestion Integration | TestSprite MCP | ✅ PASS (Run 2) | [Dashboard Run](https://www.testsprite.com/dashboard/mcp/tests/0cdc5f2f-1860-4b0c-adc2-28c75f60cdde/test/a9ac7dba-859c-41e2-be94-e4ff4d7f8a39) |
+| 4 | Extreme Edge Case Scenarios | TestSprite MCP | ✅ PASS (Run 2) | [Dashboard Run](https://www.testsprite.com/dashboard/mcp/tests/0b4843d8-d1b3-4c60-b1ec-18b6b0c36b3c/test/33accbe4-1669-49fa-a78f-79c8efd601ad) |
+| 5 | Async Architecture Upgrade & Parallelization | TestSprite MCP | ✅ PASS (Run 2) | [Dashboard Run](https://www.testsprite.com/dashboard/mcp/tests/f8953494-cfe1-49ad-aa74-047bd62401e9/test/4bba602f-626e-42b3-8979-9bb9c0c109c6) |
+| 6 | Coordination & Sybil Detection Module | TestSprite MCP | ✅ PASS (Run 2) | [Dashboard Run](https://www.testsprite.com/dashboard/mcp/tests/7bfd5898-b457-4f22-b89c-2b264579f8c1/test/74ca4d4c-7d7a-43de-b039-9146c5813d81) |
+| 7 | Integration Stress Test (CLI Concurrency) | TestSprite CLI | ✅ PASS (Run 2) | [Dashboard Run](https://www.testsprite.com/dashboard/tests/efd7c80f-4eb2-421b-9f92-c1a629004147/test/9764533b-3d4e-4cae-9983-ef67cd9a59b8) |
+| 8 | Sybil & Prompt Injection Verification | TestSprite CLI | ✅ PASS (Run 2) | [Dashboard Run](https://www.testsprite.com/dashboard/tests/efd7c80f-4eb2-421b-9f92-c1a629004147/test/94042f95-f3ad-4bb7-8569-52d83e117ffa) |
+| 9 | E2E Website & Quota Sync | TestSprite CLI | ✅ PASS (Run 3) | [Dashboard Run](https://www.testsprite.com/dashboard/tests/efd7c80f-4eb2-421b-9f92-c1a629004147/test/fb546917-31bd-4155-b9de-d96b873b2308) |
+
+For detailed breakdowns of each test case scenario (including user interface responsiveness and rate limits), refer to the comprehensive [LOOP.md](LOOP.md) log.
+
 ---
 
 ## Project Structure
@@ -230,7 +284,7 @@ npm run croo:worker
 FUD.ai/
 ├── app/
 │   ├── api/
-│   │   ├── agent/route.ts          # POST /api/agent (async job submit)
+│   │   ├── agent/route.ts          # POST + GET /api/agent (async job submit + quota status)
 │   │   ├── agent/[job_id]/route.ts # GET /api/agent/{job_id} (poll)
 │   │   ├── cron/calibrate/route.ts # Reflexion calibration cron
 │   │   └── search/route.ts         # Fumadocs Orama search
