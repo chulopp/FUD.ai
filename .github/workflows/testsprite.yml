@@ -27,7 +27,7 @@ jobs:
         run: |
           testsprite setup --from-env --yes --agent claude
 
-      # Bouncer (Server Concurrency Check): Fast and deterministic, completes in under 15s.
+      # Bouncer (Server Concurrency Check): Fast and deterministic, completes in under 15s (updated target-url).
       - name: Run TestSprite - Bouncer (Concurrency Check)
         id: bouncer
         continue-on-error: true
