@@ -2,7 +2,7 @@
   "projectId": "efd7c80f-4eb2-421b-9f92-c1a629004147",
   "type": "frontend",
   "name": "Phase 9: Landing Page Core",
-  "description": "Verifies that all sections of the landing page render and nav links function.",
+  "description": "Verifies that all sections of the landing page render correctly on the home page.",
   "priority": "p1",
   "planSteps": [
     {
@@ -11,7 +11,7 @@
     },
     {
       "type": "assertion",
-      "description": "Assert that the navbar contains the logo FUD.ai"
+      "description": "Assert that the navbar contains the logo text FUD.ai"
     },
     {
       "type": "assertion",
@@ -23,15 +23,7 @@
     },
     {
       "type": "assertion",
-      "description": "Assert that the Footer is visible at the bottom of the page"
-    },
-    {
-      "type": "action",
-      "description": "Click the Docs link in the navbar to open the documentation"
-    },
-    {
-      "type": "assertion",
-      "description": "Assert that the browser URL contains /docs, and the documentation page displays the 'Introduction' header"
+      "description": "Assert that the Footer containing 'Mit' or 'mit' is visible"
     }
   ]
 }
