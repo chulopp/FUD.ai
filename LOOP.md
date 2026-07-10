@@ -989,6 +989,7 @@ Method: POST
 - **Expected Outcome**: Live demo subtext reads '2 / 2 demo calls left this week'.
 - **Actual Verdict**: ✅ Passed
 - **Script Location**: [test_05_quota_sync.py](file:///d:/Fallah's%20File/Code/Personal%20Project/FUD.ai/testsprite_tests/test_05_quota_sync.py)
+- **Dashboard Link**: [Run 2 Quota Backend](https://www.testsprite.com/dashboard/tests/efd7c80f-4eb2-421b-9f92-c1a629004147/test/690289d7-283f-4bda-b4e0-d430b41686ae)
 - **Engineering Notes**: GET `/api/agent` rate limit sync endpoint verified. Fresh fingerprint correctly loads `usageCount: 0` and renders "2/2 remaining".
 
 ###### TC010 - Hero pill is VISIBLE for fresh user
@@ -996,6 +997,7 @@ Method: POST
 - **Expected Outcome**: Quota badge renders successfully.
 - **Actual Verdict**: ✅ Passed
 - **Script Location**: [test_05_quota_sync.py](file:///d:/Fallah's%20File/Code/Personal%20Project/FUD.ai/testsprite_tests/test_05_quota_sync.py)
+- **Dashboard Link**: [Run 2 Quota Backend](https://www.testsprite.com/dashboard/tests/efd7c80f-4eb2-421b-9f92-c1a629004147/test/690289d7-283f-4bda-b4e0-d430b41686ae)
 
 ###### TC011 - Submitting empty coin symbol is blocked
 - **Target/Endpoint**: Submit live demo form without text inputs
@@ -1014,12 +1016,14 @@ Method: POST
 - **Expected Outcome**: Quota indicator is replaced with 'Weekly demo limit reached'.
 - **Actual Verdict**: ✅ Passed
 - **Script Location**: [test_05_quota_sync.py](file:///d:/Fallah's%20File/Code/Personal%20Project/FUD.ai/testsprite_tests/test_05_quota_sync.py)
+- **Dashboard Link**: [Run 2 Quota Backend](https://www.testsprite.com/dashboard/tests/efd7c80f-4eb2-421b-9f92-c1a629004147/test/690289d7-283f-4bda-b4e0-d430b41686ae)
 
 ###### TC014 - [BUG TEST] Hero pill is HIDDEN when quota exhausted
 - **Target/Endpoint**: Reload page `/` after quota is exhausted
 - **Expected Outcome**: The 'Demo quota is now available →' pill is hidden.
 - **Actual Verdict**: ✅ Passed
 - **Script Location**: [test_05_quota_sync.py](file:///d:/Fallah's%20File/Code/Personal%20Project/FUD.ai/testsprite_tests/test_05_quota_sync.py)
+- **Dashboard Link**: [Run 2 Quota Backend](https://www.testsprite.com/dashboard/tests/efd7c80f-4eb2-421b-9f92-c1a629004147/test/690289d7-283f-4bda-b4e0-d430b41686ae)
 - **Engineering Notes**: Resolved. Fetching server quota on mount ensures state is updated and the pill remains hidden even on page refresh.
 
 ###### TC015 - [BUG TEST] Stale quota after simulated localStorage reset bug
@@ -1027,6 +1031,7 @@ Method: POST
 - **Expected Outcome**: Quota remains 0/2 on UI if Redis rate limit fingerprint is exhausted.
 - **Actual Verdict**: ✅ Passed
 - **Script Location**: [test_05_quota_sync.py](file:///d:/Fallah's%20File/Code/Personal Project/FUD.ai/testsprite_tests/test_05_quota_sync.py)
+- **Dashboard Link**: [Run 2 Quota Backend](https://www.testsprite.com/dashboard/tests/efd7c80f-4eb2-421b-9f92-c1a629004147/test/690289d7-283f-4bda-b4e0-d430b41686ae)
 - **Engineering Notes**: Resolved. Server-side count via GET endpoint correctly forces UI to keep sisa kuota at 0, preventing stale client-side quota indicators.
 
 ###### TC016 - Submitting with exhausted quota shows error state
@@ -1034,6 +1039,7 @@ Method: POST
 - **Expected Outcome**: Display server rate limit 403 error.
 - **Actual Verdict**: ✅ Passed
 - **Script Location**: [test_05_quota_sync.py](file:///d:/Fallah's%20File/Code/Personal Project/FUD.ai/testsprite_tests/test_05_quota_sync.py)
+- **Dashboard Link**: [Run 2 Quota Backend](https://www.testsprite.com/dashboard/tests/efd7c80f-4eb2-421b-9f92-c1a629004147/test/690289d7-283f-4bda-b4e0-d430b41686ae)
 
 ###### TC017 - Docs page loads successfully
 - **Target/Endpoint**: GET `/docs`
