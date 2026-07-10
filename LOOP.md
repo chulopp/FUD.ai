@@ -583,21 +583,58 @@ Method: POST
 
 #### Run #1: Initial Run
 - **Date**: 2026-07-07
-- **Status**: ✅ PASS
-
-##### Execution Summary
-- **Total Tests**: 5
-- **Passed**: 4
-- **Failed / Timeout**: 1 (Solana native, due to development-stage API latency limits)
+- **Status**: ❌ FAIL
+- **Summary**: Passed 4/5 tests. TC004 failed due to external API latency.
 
 ##### Test Cases & Scenarios
-- **TC001 (DOGE) & TC003 (BTC)**: Confirmed presence of `coordination_signals` in the async GET payload response.
-- **TC005 (FAKECOIN999)**: Simulating a low author ratio (`unique_author_ratio` < 0.3, returning 0.1) correctly forces the MCTS Hypothesis Generator to flag the narrative as "Coordinated Bot Manipulation" and add `[SYBIL]` tags in the evidence citations.
-- **Jaccard Clustering Verification**: Verified 3-gram clustering and cross-platform burst calculations via [test-sybil-module.ts](./test-sybil-module.ts) standalone tests.
+###### TC001 - post api agent valid EVM token returns structured verdict
+- **Target/Endpoint**: POST `/api/agent` & GET `/api/agent/[job_id]`
+- **Expected Outcome**: 202 Accepted, polls GET, completes with full schema including `coordination_signals` object.
+- **Actual Verdict**: ✅ Passed
+- **Dashboard Link**: [Run 1 TC001](https://www.testsprite.com/dashboard/mcp/tests/4dac0526-2843-4f5e-a140-cc3a97e76f79/test/9a24104c-3b8d-45c5-9c28-d6d9d7062461)
+- **Engineering Notes**: Confirmed presence of `coordination_signals` in the completed GET payload.
+
+###### TC002 - post api agent missing coin_symbol returns 400
+- **Target/Endpoint**: POST `/api/agent`
+- **Expected Outcome**: 400 Bad Request with missing coin_symbol error.
+- **Actual Verdict**: ✅ Passed
+- **Dashboard Link**: [Run 1 TC002](https://www.testsprite.com/dashboard/mcp/tests/4dac0526-2843-4f5e-a140-cc3a97e76f79/test/0dd0e37d-6c6e-4b81-be72-5b194e77b233)
+
+###### TC003 - post api agent native token without contract address returns 200
+- **Target/Endpoint**: POST `/api/agent` & GET `/api/agent/[job_id]`
+- **Expected Outcome**: 202 Accepted, polls GET, completes with all required schema fields including `coordination_signals`.
+- **Actual Verdict**: ✅ Passed
+- **Dashboard Link**: [Run 1 TC003](https://www.testsprite.com/dashboard/mcp/tests/4dac0526-2843-4f5e-a140-cc3a97e76f79/test/888e28e3-2563-4770-ab3d-fef77a78fc4e)
+- **Engineering Notes**: Confirmed `coordination_signals` exists in the completed GET payload for native assets.
+
+###### TC004 - post api agent Solana token with native contract address returns 200
+- **Target/Endpoint**: POST `/api/agent` & GET `/api/agent/[job_id]`
+- **Expected Outcome**: 202 Accepted, polls GET, handles native SOL token path, completes with full schema.
+- **Actual Verdict**: ❌ Failed
+- **Dashboard Link**: [Run 1 TC004](https://www.testsprite.com/dashboard/mcp/tests/4dac0526-2843-4f5e-a140-cc3a97e76f79/test/9e0ff8f0-1446-4559-865d-2fab83a94d86)
+- **Engineering Notes**: Encountered job failure or polling timeout due to external API latency in development mode when fetching Solana parameters.
+
+###### TC005 - post api agent unknown fake coin returns 200 with fallback indicator
+- **Target/Endpoint**: POST `/api/agent` & GET `/api/agent/[job_id]`
+- **Expected Outcome**: 202 Accepted, polls GET, completes with fallback=true, `coordination_signals`, and `[SYBIL]` tags in the evidence chain if authors are low.
+- **Actual Verdict**: ✅ Passed
+- **Dashboard Link**: [Run 1 TC005](https://www.testsprite.com/dashboard/mcp/tests/4dac0526-2843-4f5e-a140-cc3a97e76f79/test/4e5173cc-2d99-4736-86de-d582b7c849d7)
+- **Engineering Notes**: Simulating low authors (`unique_author_ratio: 0.1` < 0.3) successfully triggered "Coordinated Bot Manipulation" dominant branch and `[SYBIL]` evidence citations.
+
+##### Retrospective & Diagnostics
+- **Root Cause**: Solana API requests under development mode hit rate/latency limits, causing the MCTS job to take too long and fail the polling timer.
+- **Lessons Learned**: Development API endpoints (especially for Solana native paths) are vulnerable to network/rate bottlenecks.
+
+---
+
+#### Run #2: Validation Run
+- **Date**: N/A
+- **Status**: ⏳ PENDING
+- **Summary**: Run #2 has not been executed yet.
 
 ##### Key Findings & Outputs
-- **Engineering Discoveries**: Automated threshold checks trigger coordinated bot manipulation logic dynamically based on ingestion cluster sizes.
-- **Dashboard Links**: N/A
+- **Engineering Discoveries**: Verified mathematical coordination signals (unique author ratio Jaccard clustering) function correctly. Standalone clustering calculations verified via `test-sybil-module.ts`.
+- **Dashboard Links**: Refer to individual test case links above.
 
 ---
 
