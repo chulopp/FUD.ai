@@ -637,7 +637,7 @@ Method: POST
 - **Target/Endpoint**: POST `/api/agent` & GET `/api/agent/[job_id]`
 - **Expected Outcome**: 202 Accepted, polls GET, handles native SOL token path, completes with full schema.
 - **Actual Verdict**: ✅ Passed
-- **Dashboard Link**: [Run 2 TC004](https://www.testsprite.com/dashboard/mcp/tests/4dac0526-2843-4f5e-a140-cc3a97e76f79/test/9e0ff8f0-1446-4559-865d-2fab83a94d86)
+- **Dashboard Link**: [Run 2 TC004](https://www.testsprite.com/dashboard/mcp/tests/7bfd5898-b457-4f22-b89c-2b264579f8c1/test/74ca4d4c-7d7a-43de-b039-9146c5813d81)
 - **Engineering Notes**: Rerun completed successfully in 21s on the local dev server and background worker.
 
 *(All other test cases in Run 2 reference their respective passing links from Run 1).*
